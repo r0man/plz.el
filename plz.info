@@ -167,7 +167,7 @@ File: README.info,  Node: Functions,  Next: Queueing,  Prev: Examples,  Up: Usag
 =============
 
 ‘plz’
-     _(method url &key headers body else finally noquery (as ’string)
+     _(method url &key headers body during else finally noquery (as ’string)
      (then ’sync) (body-type ’text) (decode t decode-s) (connect-timeout
      plz-connect-timeout) (timeout plz-timeout))_
 
@@ -226,6 +226,10 @@ File: README.info,  Node: Functions,  Next: Queueing,  Prev: Examples,  Up: Usag
      ‘plz-http-error’, inherit from ‘plz-error’ to allow applications to
      update their code while using v0.7 (i.e.  any ‘condition-case’
      forms should now handle only ‘plz-error’, not the other two).
+
+     ‘DURING‘ is an optional callback function called each time a part
+     of the response body is arriving.  It is called with one
+     argument, the partial raw response.
 
      ‘FINALLY’ is an optional function called without argument after
      ‘THEN’ or ‘ELSE’, as appropriate.  For synchronous requests, this

@@ -254,7 +254,7 @@ connection phase and waiting to receive the response (the
 
 ;;;;; Public
 
-(cl-defun plz (method url &rest rest &key headers body else finally noquery
+(cl-defun plz (method url &rest rest &key headers body else finally noquery during
                       (as 'string) (then 'sync)
                       (body-type 'text) (decode t decode-s)
                       (connect-timeout plz-connect-timeout) (timeout plz-timeout))
@@ -320,6 +320,10 @@ NOTE: In v0.8 of `plz', only one error will be signaled:
 to update their code while using v0.7 (i.e. any `condition-case'
 forms should now handle only `plz-error', not the other two).
 
+DURING is an optional callback function called each time a part
+of the response body is arriving.  It is called with one
+argument, the partial raw response.
+
 FINALLY is an optional function called without argument after
 THEN or ELSE, as appropriate.  For synchronous requests, this
 argument is ignored.
@@ -351,6 +355,8 @@ NOQUERY is passed to `make-process', which see.
                                            collect (cons "--header" (format "%s: %s" key value))))
          (curl-config-args (append curl-config-header-args
                                    (list (cons "--url" url))
+                                   (when during
+                                     (list (cons "--no-buffer" "")))
                                    (when connect-timeout
                                      (list (cons "--connect-timeout"
                                                  (number-to-string connect-timeout))))
@@ -404,10 +410,13 @@ NOQUERY is passed to `make-process', which see.
                                 :coding 'binary
                                 :command (append (list plz-curl-program) curl-command-line-args)
                                 :connection-type 'pipe
+                                :filter #'plz--filter
                                 :sentinel #'plz--sentinel
                                 :stderr stderr-process
                                 :noquery noquery))
          sync-p)
+    (when during
+      (process-put process :plz-during during))
     (when (eq 'sync then)
       (setf sync-p t
             then (lambda (result)
@@ -718,6 +727,29 @@ Includes active and queued requests."
      (length (plz-queue-requests queue))))
 
 ;;;;; Private
+
+(defun plz--filter (process content)
+  "Filter for curl PROCESS that handles the arrival of CONTENT."
+  (when (buffer-live-p (process-buffer process))
+    (with-current-buffer (process-buffer process)
+      (let ((response-start (process-get process :plz-response-start))
+            (during (process-get process :plz-during))
+            (moving (= (point) (process-mark process))))
+        (save-excursion
+          ;; Insert the text, advancing the process marker.
+          (goto-char (process-mark process))
+          (insert content)
+          (set-marker (process-mark process) (point)))
+        (when moving
+          (goto-char (process-mark process)))
+        (when during
+          (if response-start
+              (funcall during content)
+            (save-excursion
+              (goto-char (point-min))
+              (when (re-search-forward plz-http-end-of-headers-regexp nil t)
+                (process-put process :plz-response-start (point))
+                (funcall during (buffer-substring (point) (process-mark process)))))))))))
 
 (defun plz--sentinel (process status)
   "Sentinel for curl PROCESS.

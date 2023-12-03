@@ -559,6 +559,37 @@ and only called once."
 
 ;; TODO: Add test for canceling queue.
 
+(plz-deftest plz-stream-bytes ()
+  (let* ((complete-response)
+         (partial-response)
+         (process (plz 'get (url "/stream-bytes/100000")
+                    :as 'binary
+                    :during (lambda (content)
+                              (add-to-list 'partial-response content))
+                    :then (lambda (content)
+                            (setq complete-response content)))))
+    (plz-test-wait process)
+    (should (> (length partial-response) 1))
+    (should (string-equal complete-response
+                          (with-temp-buffer
+                            (toggle-enable-multibyte-characters)
+                            (set-buffer-file-coding-system 'raw-text)
+                            (seq-doseq (content (reverse partial-response))
+                              (insert content))
+                            (buffer-string))))))
+
+(plz-deftest plz-stream-text ()
+  (let* ((complete-response)
+         (partial-response)
+         (process (plz 'get (url "/stream/1000")
+                    :during (lambda (content)
+                              (add-to-list 'partial-response content))
+                    :then (lambda (content)
+                            (setq complete-response content)))))
+    (plz-test-wait process)
+    (should (> (length partial-response) 1))
+    (should (equal complete-response (string-join (reverse partial-response) "")))))
+
 ;;;; Footer
 
 (provide 'test-plz)
