@@ -254,7 +254,7 @@ connection phase and waiting to receive the response (the
 
 ;;;;; Public
 
-(cl-defun plz (method url &rest rest &key headers body else finally noquery
+(cl-defun plz (method url &rest rest &key headers body else finally noquery stream
                       (as 'string) (then 'sync)
                       (body-type 'text) (decode t decode-s)
                       (connect-timeout plz-connect-timeout) (timeout plz-timeout))
@@ -328,12 +328,26 @@ CONNECT-TIMEOUT and TIMEOUT are a number of seconds that limit
 how long it takes to connect to a host and to receive a response
 from a host, respectively.
 
+If STREAM is non-nil, a THEN callback must be given and the
+response will be streamed in chunks.  The THEN function is
+invoked for each incoming chunk, receiving the current chunk as
+its parameter.  The type of object passed to the THEN callback
+depends on the AS argument.  When using this option, the
+buffering in the underlying curl output stream is turned off, and
+there are no guarantees regarding the chunk, such as being
+line-based or not.  It is the user's responsibility to understand
+and process each chunk, and to construct the finalized response
+if necessary.  Use the FINALLY callback to determine when the
+request is complete.
+
 NOQUERY is passed to `make-process', which see.
 
 \(To silence checkdoc, we mention the internal argument REST.)"
   ;; FIXME(v0.8): Remove the note about error changes from the docstring.
   ;; FIXME(v0.8): Update error signals in docstring.
   (declare (indent defun))
+  (when (and stream (not (functionp then)))
+    (signal 'plz-error (make-plz-error :message "streaming can only be used with asynchronous requests")))
   (setf decode (if (and decode-s (not decode))
                    nil decode))
   ;; NOTE: By default, for PUT requests and POST requests >1KB, curl sends an
@@ -351,6 +365,8 @@ NOQUERY is passed to `make-process', which see.
                                            collect (cons "--header" (format "%s: %s" key value))))
          (curl-config-args (append curl-config-header-args
                                    (list (cons "--url" url))
+                                   (when stream
+                                     (list (cons "--no-buffer" "")))
                                    (when connect-timeout
                                      (list (cons "--connect-timeout"
                                                  (number-to-string connect-timeout))))
@@ -404,6 +420,7 @@ NOQUERY is passed to `make-process', which see.
                                 :coding 'binary
                                 :command (append (list plz-curl-program) curl-command-line-args)
                                 :connection-type 'pipe
+                                :filter (when stream #'plz--stream-process-filter)
                                 :sentinel #'plz--sentinel
                                 :stderr stderr-process
                                 :noquery noquery))
@@ -900,6 +917,33 @@ Assumes point is at start of HTTP response."
   (unless (re-search-forward plz-http-end-of-headers-regexp nil t)
     (signal 'plz-http-error '("plz--narrow-to-body: Unable to find end of headers")))
   (narrow-to-region (point) (point-max)))
+
+(defun plz--stream-process-filter (proc string)
+  "Process filter that handles a streaming HTTP response.
+
+PROC is the process object.
+
+STRING is the string of output from the process."
+  (when (buffer-live-p (process-buffer proc))
+    (with-current-buffer (process-buffer proc)
+      (let ((moving (= (point) (process-mark proc))))
+        (save-excursion
+          (goto-char (process-mark proc))
+          (insert string)
+          (set-marker (process-mark proc) (point)))
+        (if (process-get proc :plz-body-position)
+            (progn
+              (goto-char (point-min))
+              (funcall (process-get proc :plz-then))
+              (delete-region (point-min) (point-max))
+              (set-marker (process-mark proc) (point))
+              (widen))
+          (save-excursion
+            (goto-char (point-min))
+            (when (re-search-forward plz-http-end-of-headers-regexp nil t)
+              (process-put proc :plz-body-position (point)))))
+        (when moving
+          (goto-char (process-mark proc)))))))
 
 ;;;; Footer
 

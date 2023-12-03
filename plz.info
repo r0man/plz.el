@@ -1,4 +1,4 @@
-This is README.info, produced by makeinfo version 6.7 from README.texi.
+This is README.info, produced by makeinfo version 6.8 from README.texi.
 
 INFO-DIR-SECTION Emacs
 START-INFO-DIR-ENTRY
@@ -236,6 +236,17 @@ File: README.info,  Node: Functions,  Next: Queueing,  Prev: Examples,  Up: Usag
      ‘CONNECT-TIMEOUT’ and ‘TIMEOUT’ are a number of seconds that limit
      how long it takes to connect to a host and to receive a response
      from a host, respectively.
+
+     If ‘STREAM’ is non-nil, a ‘THEN’ callback must be given and the
+     response will be streamed in chunks.  The ‘THEN’ function is
+     invoked for each incoming chunk, receiving the current chunk as its
+     parameter.  The type of object passed to the THEN callback depends
+     on the AS argument.  When using this option, the buffering in the
+     underlying curl output stream is turned off, and there are no
+     guarantees regarding the chunk, such as being line-based or not.
+     It is the user’s responsibility to understand and process each
+     chunk, and to construct the finalized response if necessary.  Use
+     the ‘FINALLY’ callback to determine when the request is complete.
 
      ‘NOQUERY’ is passed to ‘make-process’, which see.
 
@@ -582,28 +593,28 @@ Node: Manual1616
 Node: Usage1922
 Node: Examples2423
 Node: Functions3790
-Node: Queueing7487
-Node: Tips8870
-Node: Changelog9171
-Node: 08-pre9479
-Node: 0729586
-Node: 0719885
-Node: 0710098
-Node: 0611986
-Node: 05412597
-Node: 05312840
-Node: 05213156
-Node: 05113363
-Node: 0513615
-Node: 0413823
-Node: 0314731
-Node: 02115181
-Node: 0215332
-Node: 0115463
-Node: Credits15559
-Node: Development15925
-Node: Copyright assignment16439
-Node: License17027
+Node: Queueing8204
+Node: Tips9587
+Node: Changelog9888
+Node: 08-pre10196
+Node: 07210303
+Node: 07110602
+Node: 0710815
+Node: 0612703
+Node: 05413314
+Node: 05313557
+Node: 05213873
+Node: 05114080
+Node: 0514332
+Node: 0414540
+Node: 0315448
+Node: 02115898
+Node: 0216049
+Node: 0116180
+Node: Credits16276
+Node: Development16642
+Node: Copyright assignment17156
+Node: License17744
 
 End Tag Table
 

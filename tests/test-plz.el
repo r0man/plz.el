@@ -559,6 +559,93 @@ and only called once."
 
 ;; TODO: Add test for canceling queue.
 
+(plz-deftest plz-get-stream-as-binary ()
+  (let* ((expected-body)
+         (process-1 (plz 'get (url "/stream/100000")
+                      :as 'binary
+                      :then (lambda (body)
+                              (setq expected-body body))))
+         (chunks)
+         (process-2 (plz 'get (url "/stream/100000")
+                      :as 'binary
+                      :stream t
+                      :then (lambda (chunk)
+                              (push chunk chunks)))))
+    (plz-test-wait process-1)
+    (plz-test-wait process-2)
+    (should (equal expected-body (string-join (reverse chunks) "")))
+    (should (> (length chunks) 1))))
+
+(plz-deftest plz-get-stream-as-buffer ()
+  (let* ((expected-body)
+         (process-1 (plz 'get (url "/stream/100000")
+                      :then (lambda (body)
+                              (setq expected-body body))))
+         (chunks)
+         (process-2 (plz 'get (url "/stream/100000")
+                      :as 'buffer
+                      :stream t
+                      :then (lambda (buffer)
+                              (push (with-current-buffer buffer
+                                      (buffer-string))
+                                    chunks)))))
+    (plz-test-wait process-1)
+    (plz-test-wait process-2)
+    (should (equal expected-body (string-join (reverse chunks) "")))
+    (should (> (length chunks) 1))))
+
+(plz-deftest plz-get-stream-as-function ()
+  (let* ((expected-body)
+         (process-1 (plz 'get (url "/stream/100000")
+                      :as 'binary
+                      :then (lambda (body)
+                              (setq expected-body body))))
+         (chunks)
+         (process-2 (plz 'get (url "/stream/100000")
+                      :as #'buffer-string
+                      :stream t
+                      :then (lambda (chunk)
+                              (push chunk chunks)))))
+    (plz-test-wait process-1)
+    (plz-test-wait process-2)
+    (should (equal expected-body (string-join (reverse chunks) "")))
+    (should (> (length chunks) 1))))
+
+(plz-deftest plz-get-stream-as-response ()
+  (let* ((expected-body)
+         (process-1 (plz 'get (url "/stream/100000")
+                      :then (lambda (body)
+                              (setq expected-body body))))
+         (chunks)
+         (process-2 (plz 'get (url "/stream/100000")
+                      :as 'response
+                      :stream t
+                      :then (lambda (response)
+                              (let ((headers (plz-response-headers response)))
+                                (should (equal 200 (plz-response-status response)))
+                                (should (equal "application/json" (alist-get 'content-type headers)))
+                                (push (plz-response-body response) chunks))))))
+    (plz-test-wait process-1)
+    (plz-test-wait process-2)
+    (should (equal expected-body (string-join (reverse chunks) "")))
+    (should (> (length chunks) 1))))
+
+(plz-deftest plz-get-stream-as-string ()
+  (let* ((expected-body)
+         (process-1 (plz 'get (url "/stream/100000")
+                      :then (lambda (body)
+                              (setq expected-body body))))
+         (chunks)
+         (process-2 (plz 'get (url "/stream/100000")
+                      :as 'string
+                      :stream t
+                      :then (lambda (chunk)
+                              (push chunk chunks)))))
+    (plz-test-wait process-1)
+    (plz-test-wait process-2)
+    (should (equal expected-body (string-join (reverse chunks) "")))
+    (should (> (length chunks) 1))))
+
 ;;;; Footer
 
 (provide 'test-plz)
