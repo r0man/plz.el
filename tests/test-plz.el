@@ -595,3 +595,55 @@ and only called once."
 (provide 'test-plz)
 
 ;;; test-plz.el ends here
+
+(defun plz--default-process-filter (proc string)
+  "Insert STRING into the process buffer of PROC."
+  (when (buffer-live-p (process-buffer proc))
+    (with-current-buffer (process-buffer proc)
+      (let ((moving (= (point) (process-mark proc))))
+        (save-excursion
+          (goto-char (process-mark proc))
+          (insert string)
+          (set-marker (process-mark proc) (point)))
+        (if moving (goto-char (process-mark proc)))))))
+
+(defun plz--make-process-filter (separator-regex)
+  "Insert STRING into the process buffer of PROC."
+  (let (end-of-headers)
+    (lambda (proc string)
+      (plz--default-process-filter proc string)
+      (with-current-buffer (process-buffer proc)
+        (unless end-of-headers
+          (save-excursion
+            (goto-char (point-min))
+            (when (re-search-forward plz-http-end-of-headers-regexp nil t)
+              (setf end-of-headers (point)))))
+        (when end-of-headers
+          (goto-char end-of-headers)
+          (while (re-search-forward separator-regex nil t)
+            (let ((end (point)))
+              (goto-char (point-min))
+              (narrow-to-region (point-min) end)
+              (funcall (process-get proc :plz-then))
+              (widen)
+              (delete-region end-of-headers end)))
+          (goto-char (process-mark proc)))))))
+
+(defvar plz--stream-object-separator
+  (rx (or "\r\n" "\n")))
+
+(plz 'get "http://localhost/stream-bytes/5"
+  :filter #'plz--default-process-filter
+  :then (lambda (content)
+          (message "then: %s" content)))
+
+(plz 'get "http://localhost/stream/5"
+  :filter (plz--make-process-filter plz--stream-object-separator)
+  :then (lambda (content)
+          (message "then: %s" content)))
+
+(plz 'get "http://localhost/stream/5"
+  :as #'json-read
+  :filter (plz--make-process-filter plz--stream-object-separator)
+  :then (lambda (content)
+          (message "then: %s" content)))
