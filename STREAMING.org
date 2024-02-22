@@ -1,0 +1,79 @@
+
+#+begin_src sh
+  curl https://api.openai.com/v1/chat/completions   -H "Content-Type: application/json"   -H "Authorization: Bearer $OPENAI_API_KEY"   -d '{
+    "model": "gpt-3.5-turbo",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a poetic assistant, skilled in explaining complex programming concepts with creative flair."
+      },
+      {
+        "role": "user",
+        "content": "Compose a poem that explains the concept of recursion in programming."
+      }
+    ]
+  }'
+#+end_src
+
+#+begin_src sh
+  curl https://api.openai.com/v1/chat/completions -v   -H "Content-Type: application/json"   -H "Authorization: Bearer $OPENAI_API_KEY"   -d '{
+    "model": "gpt-3.5-turbo",
+    "stream": true,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a poetic assistant, skilled in explaining complex programming concepts with creative flair."
+      },
+      {
+        "role": "user",
+        "content": "Compose a poem that explains the concept of recursion in programming."
+      }
+    ]
+  }'
+#+end_src
+
+
+;; https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation
+
+#+begin_src emacs-lisp
+  (plz 'get "http://localhost/stream/5"
+    :as #'json-read
+    :filter (plz--make-process-filter plz--stream-object-separator)
+    :then (lambda (content)
+            (setq my-content content)
+            (message "then: %s" content)))
+#+end_src
+
+#+begin_src emacs-lisp
+  (plz 'post "https://api.openai.com/v1/chat/completions"
+    :as #'json-read
+    :headers `(("Authorization" . (format "Bearer %s" (getenv "OPENAI_API_KEY")))
+               ("Content-Type" . "application/json"))
+    :body (json-encode '(("model" . "gpt-3.5-turbo")
+                         ("messages" . [(("role" . "system")
+                                         ("content" . "You are an assistant."))
+                                        (("role" . "user")
+                                         ("content" . "Which model are you running?"))])
+                         ("stream" . nil)))
+    :then (lambda (content)
+            (message "then: %s" content)))
+#+end_src
+
+#+begin_src emacs-lisp
+  (plz 'post "https://api.openai.com/v1/chat/completions"
+    ;; :as #'json-read
+    :headers `(("Authorization" . (format "Bearer %s" (getenv "OPENAI_API_KEY")))
+               ("Content-Type" . "application/json"))
+    :body (json-encode '(("model" . "gpt-3.5-turbo")
+                         ("messages" . [(("role" . "system")
+                                         ("content" . "You are an assistant."))
+                                        (("role" . "user")
+                                         ("content" . "Which model are you running?"))])
+                         ("stream" . t)))
+    :then (lambda (content)
+            (message "then: %s" content)))
+#+end_src
+
+
+;; https://api.coingecko.com/api/v3/coins/bitcoin
+;; https://realtime.ably.io/sse
