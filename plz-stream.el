@@ -11,9 +11,12 @@
 (require 'plz)
 
 (cl-defun plz-stream (method url &rest rest &key headers body else finally noquery
-                      (as 'string) (then 'sync)
-                      (body-type 'text) (decode t decode-s)
-                      (connect-timeout plz-connect-timeout) (timeout plz-timeout))
+                             (as 'string)
+                             (body-type 'text)
+                             (connect-timeout plz-connect-timeout)
+                             (decode t decode-s)
+                             (then 'sync)
+                             (timeout plz-timeout))
   "Request METHOD from URL with curl.
 Return the curl process object or, for a synchronous request, the
 selected result.
@@ -101,14 +104,17 @@ NOQUERY is passed to `make-process', which see.
   (let* ((data-arg (pcase-exhaustive body-type
                      ('binary "--data-binary")
                      ('text "--data")))
+         (process-filter (pcase as
+                           (`(filter ,(and (pred functionp) filter-fn))
+                            filter-fn)))
          (curl-command-line-args (append plz-curl-default-args
                                          (list "--config" "-")))
          (curl-config-header-args (cl-loop for (key . value) in headers
                                            collect (cons "--header" (format "%s: %s" key value))))
          (curl-config-args (append curl-config-header-args
                                    (list (cons "--url" url))
-                                   ;; (when filter
-                                   ;;   (list (cons "--no-buffer" "")))
+                                   (when process-filter
+                                     (list (cons "--no-buffer" "")))
                                    (when connect-timeout
                                      (list (cons "--connect-timeout"
                                                  (number-to-string connect-timeout))))
@@ -162,12 +168,13 @@ NOQUERY is passed to `make-process', which see.
                                 :coding 'binary
                                 :command (append (list plz-curl-program) curl-command-line-args)
                                 :connection-type 'pipe
-                                :filter #'plz--process-filter
+                                :filter process-filter
                                 :sentinel #'plz--sentinel-stream
                                 :stderr stderr-process
                                 :noquery noquery))
          sync-p)
-    (process-put process :plz-filter #'plz--process-filter)
+    (when process-filter
+      (process-put process :plz-filter process-filter))
     (when (eq 'sync then)
       (setf sync-p t
             then (lambda (result)
@@ -230,6 +237,17 @@ NOQUERY is passed to `make-process', which see.
                      (when (file-exists-p filename)
                        (delete-file filename)))
                    (funcall then (make-plz-error :message (format "error while writing to file %S: %S" filename err)))))))
+       (`(filter ,(and (pred functionp) filter-fn))
+        (lambda ()
+          (let ((coding-system (or (plz--coding-system) 'utf-8)))
+            (pcase as
+              ('binary (set-buffer-multibyte nil)))
+            (plz--narrow-to-body)
+            (when decode
+              (decode-coding-region (point) (point-max) coding-system))
+            (funcall then (or (buffer-string)
+                              (make-plz-error :message (format "buffer-string is nil in buffer:%S" process-buffer)))))))
+
        ((pred functionp) (lambda ()
                            (let ((coding-system (or (plz--coding-system) 'utf-8)))
                              (plz--narrow-to-body)
@@ -294,7 +312,7 @@ NOQUERY is passed to `make-process', which see.
 (defun plz--sentinel-stream (process status)
   "Sentinel for curl PROCESS.
 STATUS should be the process's event string (see info
-node `(elisp) Sentinels').  Calls `plz--respond' to process the
+node `(elisp) Sentinels').  Calls `plz--respond-stream' to process the
 HTTP response (directly for synchronous requests, or from a timer
 for asynchronous ones)."
   (pcase status
@@ -303,8 +321,8 @@ for asynchronous ones)."
          (rx "exited abnormally with code " (group (1+ digit))))
      (let ((buffer (process-buffer process)))
        (if (process-get process :plz-sync)
-           (plz--respond process buffer status)
-         (run-at-time 0 nil #'plz--respond process buffer status))))))
+           (plz--respond-stream process buffer status)
+         (run-at-time 0 nil #'plz--respond-stream process buffer status))))))
 
 (defun plz--respond-stream (process buffer status)
   "Respond to HTTP response from PROCESS in BUFFER.
@@ -329,10 +347,7 @@ argument passed to `plz--sentinel', which see."
              ((and status (guard (<= 200 status 299)))
               ;; Any 2xx response is considered successful.
               (ignore status) ; Byte-compiling in Emacs <28 complains without this.
-              ;; TODO: Move this funcall?
-              (message "PLZ--RESPOND: %s" status)
-              (unless (process-get process :plz-filter)
-                (funcall (process-get process :plz-then))))
+              (funcall (process-get process :plz-then)))
              (_
               ;; TODO: If using ":as 'response", the HTTP response
               ;; should be passed to the THEN function, regardless
@@ -371,18 +386,51 @@ argument passed to `plz--sentinel', which see."
       (funcall finally))
     (unless (or (process-get process :plz-sync)
                 (eq 'buffer (process-get process :plz-as)))
-      ;; TODO: RESTORE
-      (let ((response-buffer (get-buffer-create "CURL")))
-        (with-current-buffer response-buffer
-          ;; (switch-to-buffer-other-window response-buffer)
-          (erase-buffer)
-          (insert (with-current-buffer buffer
-                    (widen)
-                    (buffer-string)))))
       (kill-buffer buffer))))
 
+;; Streaming
+
+(defun plz-handle-default-response (proc)
+  "The default response handler for PROC."
+  (message "HANDLE default: %s" (process-status (process-buffer proc)))
+  (pcase (process-status (process-buffer proc))
+    ('exit (message "DONE"))))
+
+(defun plz-handle-event-stream-response (proc)
+  "The event stream response handler for PROC."
+  (message "HANDLE text/event-stream: %s" (process-status (process-buffer proc)))
+  (pcase (process-status (process-buffer proc))
+    ('exit (message "DONE"))))
+
+(defun plz-handle-json-response (proc)
+  "The JSON response handler for PROC."
+  (message "HANDLE application/json: %s" (process-status (process-buffer proc)))
+  (pcase (process-status (process-buffer proc))
+    ('exit (save-excursion
+             (let* ((headers (process-get proc :plz-headers))
+                    (coding-system (or (plz--coding-system headers) 'utf-8)))
+               (goto-char (point-min))
+               (message "BUFFER: %s %s" (buffer-name) (point))
+               (plz--narrow-to-body)
+               ;; TODO: Decode conditionally?
+               ;; (decode-coding-region (point) (point-max) coding-system)
+               ;; (funcall
+               ;;  (process-get proc :plz-then)
+               ;;  (make-plz-response
+               ;;   :version nil ;; TODO:
+               ;;   :status  (process-get proc :plz-status)
+               ;;   :headers headers
+               ;;   :body (buffer-string)))
+               )))))
+
+(defvar plz-response-handlers
+  '(("application/json" . plz-handle-json-response)
+    ("text/event-stream" . plz-handle-event-stream-response)
+    (t . plz-handle-default-response))
+  "An association list from content type to response handlers.")
+
 (defun plz--parse-content-type-header (header)
-  "Parse CONTENT-TYPE HEADER and return its components as an alist."
+  "Parse the Content-Type HEADER and return its components as an alist."
   (when (and header (not (string-blank-p header)))
     (let ((components (split-string header ";")))
       (let ((type (car components))
@@ -393,8 +441,77 @@ argument passed to `plz--sentinel', which see."
                        collect (cons (intern (downcase (match-string 1 param)))
                                      (match-string 2 param))))))))
 
-(defun plz--default-process-filter (proc string)
+(defun plz--process-filter-insert (proc string)
   "Insert STRING into the process buffer of PROC."
+  (let ((moving (= (point) (process-mark proc))))
+    (save-excursion
+      (goto-char (process-mark proc))
+      (insert string)
+      (set-marker (process-mark proc) (point)))
+    (when moving
+      (goto-char (process-mark proc)))))
+
+(defun plz--process-filter-set-status (proc)
+  "Save the HTTP response status under :plz-status in PROC."
+  (unless (process-get proc :plz-status)
+    (save-excursion
+      (goto-char (point-min))
+      (plz--skip-proxy-headers)
+      (while (plz--skip-redirect-headers))
+      (when-let (status (plz--http-status))
+        (process-put proc :plz-status status)))))
+
+(defun plz--process-filter-set-headers (proc)
+  "Save the HTTP response headers under :plz-headers in PROC."
+  (unless (process-get proc :plz-headers)
+    (save-excursion
+      (goto-char (point-min))
+      (plz--skip-proxy-headers)
+      (while (plz--skip-redirect-headers))
+      (when-let (headers (plz--headers))
+        (process-put proc :plz-headers headers)))))
+
+(defun plz--process-filter-handle-content (proc handlers)
+  "Save the HTTP response headers under :plz-headers in PROC."
+  (let* ((headers (process-get proc :plz-headers))
+         (content-type (car (plz--parse-content-type-header
+                             (alist-get 'content-type headers)))))
+    (funcall (or (alist-get content-type handlers nil nil #'equal)
+                 (alist-get t handlers)
+                 #'plz-handle-default-response)
+             proc)))
+
+(defun plz--process-filter (handlers)
+  "Process filter that handles a HTTP response.
+
+PROC is the process object.
+
+STRING is the string of output from the process."
+  (lambda (proc string)
+    (when (buffer-live-p (process-buffer proc))
+      (with-current-buffer (process-buffer proc)
+        (let ((moving (= (point) (process-mark proc))))
+          (plz--process-filter-insert proc string)
+          (plz--process-filter-set-status proc)
+          (plz--process-filter-set-headers proc)
+          (plz--process-filter-handle-content proc handlers)
+          (when moving (goto-char (process-mark proc))))))))
+
+(defun plz--process-stream-filter (proc string)
+  (when (buffer-live-p (process-buffer proc))
+    (with-current-buffer (process-buffer proc)
+      (let ((moving (= (point) (process-mark proc))))
+        (plz--process-filter-insert proc string)
+        (plz--process-filter-set-status proc)
+        (plz--process-filter-set-headers proc)
+        (when moving (goto-char (process-mark proc)))))))
+
+(defun plz--process-stream-filter (proc string)
+  "Process filter that handles a streaming HTTP response.
+
+PROC is the process object.
+
+STRING is the string of output from the process."
   (when (buffer-live-p (process-buffer proc))
     (with-current-buffer (process-buffer proc)
       (let ((moving (= (point) (process-mark proc))))
@@ -402,39 +519,58 @@ argument passed to `plz--sentinel', which see."
           (goto-char (process-mark proc))
           (insert string)
           (set-marker (process-mark proc) (point)))
-        (if moving (goto-char (process-mark proc)))))))
-
-(defun plz--process-filter (proc string)
-  ;; (message "Filter called: %s" string)
-  (plz--default-process-filter proc string)
-  (when (buffer-live-p (process-buffer proc))
-    (with-current-buffer (process-buffer proc)
-      (let ((moving (= (point) (process-mark proc))))
-        ;; Find and set the HTTP status code of the response.
-        (unless (process-get proc :plz-status)
+        (if-let (position (process-get proc :plz-eof-headers))
+            (save-excursion
+              (goto-char (point-min))
+              (funcall (process-get proc :plz-then))
+              (delete-region (point-min) (point-max))
+              (widen))
           (save-excursion
             (goto-char (point-min))
-            (plz--skip-proxy-headers)
-            (while (plz--skip-redirect-headers))
-            (when-let (status (plz--http-status))
-              (message "STATUS: %s" status)
-              (process-put proc :plz-status status))))
-        ;; Find and set the HTTP headers of the response.
-        (unless (process-get proc :plz-headers)
-          (save-excursion
-            (goto-char (point-min))
-            (plz--skip-proxy-headers)
-            (while (plz--skip-redirect-headers))
-            (when-let (headers (plz--headers))
-              (message "HEADERS: %s" headers)
-              (setq my-headers headers)
-              (process-put proc :plz-headers headers))))
-        (when-let (headers (process-get proc :plz-headers))
-          (when-let (content-type (alist-get 'content-type headers))
-            (message "CONTENT-TYPE: %s" content-type)))))))
+            (when (re-search-forward plz-http-end-of-headers-regexp nil t)
+              (process-put proc :plz-eof-headers (point)))))
+        (when moving (goto-char (process-mark proc)))))))
 
 ;;;; Footer
 
 (provide 'plz-stream)
 
 ;;; plz-stream.el ends here
+
+;; (plz-stream 'get "http://localhost/stream/500"
+;;   :as `(filter ,#'plz--process-stream-filter)
+;;   :else (lambda (error)
+;;           (message "ERROR: %s" error))
+;;   :then (lambda (content)
+;;           (message "then:")
+;;           ;; (message "then: %s" content)
+;;           ))
+
+;; (plz-stream 'post "http://localhost/post"
+;;   :headers '(("Content-Type" . "application/json"))
+;;   :body  (json-encode (list (cons "key" "value")))
+;;   :as `(filter ,(plz--process-filter plz-response-handlers))
+;;   :then (lambda (response)
+;;           (message "THEN: %s" response))
+;;   :then (lambda (content)
+;;           (message "then: %s" content))
+;;   :else (lambda (error)
+;;           (message "ERROR: %s" error)))
+
+;; (plz-stream 'post "https://api.openai.com/v1/chat/completions"
+;;   :as `(filter ,#'plz--process-stream-filter)
+;;   :headers `(("Authorization" . ,(format "Bearer %s"
+;;                                          (auth-source-pick-first-password :host "openai.com" :user "ellama")))
+;;              ("Content-Type" . "application/json"))
+;;   :body (json-encode '(("model" . "gpt-3.5-turbo")
+;;                        ("messages" . [(("role" . "system")
+;;                                        ("content" . "You are an assistant."))
+;;                                       (("role" . "user")
+;;                                        ("content" . "Which model are you running?"))])
+;;                        ("stream" . t)))
+;;   :then (lambda (content)
+;;           (message "then: %s" content))
+;;   :else (lambda (error)
+;;           (message "ERROR: %s" error))
+;;   :finally (lambda ()
+;;              (message "Done")))
