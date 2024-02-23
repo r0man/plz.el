@@ -91,10 +91,10 @@ in URL-encoded form)."
                              (let ((plz-curl-default-args
                                     ',(append plz-curl-default-args (list (format "--http%s" http-version)))))
                                (cl-labels ((url (part)
-                                                (setf part (replace-regexp-in-string
-                                                            "URI-PREFIX" (url-hexify-string plz-test-uri-prefix)
-                                                            part t t))
-                                                (concat plz-test-uri-prefix part)))
+                                             (setf part (replace-regexp-in-string
+                                                         "URI-PREFIX" (url-hexify-string plz-test-uri-prefix)
+                                                         part t t))
+                                             (concat plz-test-uri-prefix part)))
                                  ,@docstring-keys-and-body)))))))
 
 ;;;; Functions
@@ -559,91 +559,8 @@ and only called once."
 
 ;; TODO: Add test for canceling queue.
 
-(plz-deftest plz-stream-bytes ()
-  (let* ((complete-response)
-         (partial-response)
-         (process (plz 'get (url "/stream-bytes/100000")
-                    :as 'binary
-                    :during (lambda (content)
-                              (add-to-list 'partial-response content))
-                    :then (lambda (content)
-                            (setq complete-response content)))))
-    (plz-test-wait process)
-    (should (> (length partial-response) 1))
-    (should (string-equal complete-response
-                          (with-temp-buffer
-                            (toggle-enable-multibyte-characters)
-                            (set-buffer-file-coding-system 'raw-text)
-                            (seq-doseq (content (reverse partial-response))
-                              (insert content))
-                            (buffer-string))))))
-
-(plz-deftest plz-stream-text ()
-  (let* ((complete-response)
-         (partial-response)
-         (process (plz 'get (url "/stream/1000")
-                    :during (lambda (content)
-                              (add-to-list 'partial-response content))
-                    :then (lambda (content)
-                            (setq complete-response content)))))
-    (plz-test-wait process)
-    (should (> (length partial-response) 1))
-    (should (equal complete-response (string-join (reverse partial-response) "")))))
-
 ;;;; Footer
 
 (provide 'test-plz)
 
 ;;; test-plz.el ends here
-
-(defun plz--default-process-filter (proc string)
-  "Insert STRING into the process buffer of PROC."
-  (when (buffer-live-p (process-buffer proc))
-    (with-current-buffer (process-buffer proc)
-      (let ((moving (= (point) (process-mark proc))))
-        (save-excursion
-          (goto-char (process-mark proc))
-          (insert string)
-          (set-marker (process-mark proc) (point)))
-        (if moving (goto-char (process-mark proc)))))))
-
-(defun plz--make-process-filter (separator-regex)
-  "Insert STRING into the process buffer of PROC."
-  (let (end-of-headers)
-    (lambda (proc string)
-      (plz--default-process-filter proc string)
-      (with-current-buffer (process-buffer proc)
-        (unless end-of-headers
-          (save-excursion
-            (goto-char (point-min))
-            (when (re-search-forward plz-http-end-of-headers-regexp nil t)
-              (setf end-of-headers (point)))))
-        (when end-of-headers
-          (goto-char end-of-headers)
-          (while (re-search-forward separator-regex nil t)
-            (let ((end (point)))
-              (goto-char (point-min))
-              (narrow-to-region (point-min) end)
-              (funcall (process-get proc :plz-then))
-              (widen)
-              (delete-region end-of-headers end)))
-          (goto-char (process-mark proc)))))))
-
-(defvar plz--stream-object-separator
-  (rx (or "\r\n" "\n")))
-
-(plz 'get "http://localhost/stream-bytes/5"
-  :filter #'plz--default-process-filter
-  :then (lambda (content)
-          (message "then: %s" content)))
-
-(plz 'get "http://localhost/stream/5"
-  :filter (plz--make-process-filter plz--stream-object-separator)
-  :then (lambda (content)
-          (message "then: %s" content)))
-
-(plz 'get "http://localhost/stream/5"
-  :as #'json-read
-  :filter (plz--make-process-filter plz--stream-object-separator)
-  :then (lambda (content)
-          (message "then: %s" content)))

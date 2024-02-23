@@ -1,6 +1,6 @@
 
-#+begin_src sh
-  curl https://api.openai.com/v1/chat/completions   -H "Content-Type: application/json"   -H "Authorization: Bearer $OPENAI_API_KEY"   -d '{
+#+begin_src sh :results verbatim
+  curl https://api.openai.com/v1/chat/completions   -H "Content-Type: application/json"   -H "Authorization: Bearer XXX"   -d '{
     "model": "gpt-3.5-turbo",
     "messages": [
       {
@@ -14,6 +14,33 @@
     ]
   }'
 #+end_src
+
+#+RESULTS:
+#+begin_example
+{
+  "id": "chatcmpl-8vKmzttHCP3fGYzhWmnMCdwpsvvaF",
+  "object": "chat.completion",
+  "created": 1708675301,
+  "model": "gpt-3.5-turbo-0125",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "In the realm of code, a concept profound,\nRecursion's enchantment can truly astound.\nLike a mirror reflecting its own reflection,\nIt calls upon itself with precise perfection.\n\nA function that calls itself, recursive it be,\nUnraveling problems with elegant glee.\nEach call a journey, a quest to explore,\nDividing the task, conquering once more.\n\nThrough loops and conditions, it weaves its spell,\nUnraveling mysteries, breaking them well.\nInfinite patterns, in a finite shell,\nRecursion dances, a timeless carousel.\n\nLike a Russian doll, nested in its form,\nRecursion repeats, a mesmerizing storm.\nIn its elegant beauty, it finds its might,\nSolving complexities with recursive light.\n\nSo embrace the magic, let recursion guide,\nIn the land of programming, let it be your guide.\nFor in its looping grace, you'll surely find,\nA recursive solution, one of a kind."
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 39,
+    "completion_tokens": 191,
+    "total_tokens": 230
+  },
+  "system_fingerprint": "fp_cbdb91ce3f"
+}
+#+end_example
 
 #+begin_src sh
   curl https://api.openai.com/v1/chat/completions -v   -H "Content-Type: application/json"   -H "Authorization: Bearer $OPENAI_API_KEY"   -d '{
@@ -47,7 +74,7 @@
 #+begin_src emacs-lisp
   (plz 'post "https://api.openai.com/v1/chat/completions"
     :as #'json-read
-    :headers `(("Authorization" . (format "Bearer %s" (getenv "OPENAI_API_KEY")))
+    :headers `(("Authorization" . ,(format "Bearer %s" (getenv "OPENAI_API_KEY")))
                ("Content-Type" . "application/json"))
     :body (json-encode '(("model" . "gpt-3.5-turbo")
                          ("messages" . [(("role" . "system")
@@ -62,7 +89,7 @@
 #+begin_src emacs-lisp
   (plz 'post "https://api.openai.com/v1/chat/completions"
     ;; :as #'json-read
-    :headers `(("Authorization" . (format "Bearer %s" (getenv "OPENAI_API_KEY")))
+    :headers `(("Authorization" . ,(format "Bearer %s" (getenv "OPENAI_API_KEY")))
                ("Content-Type" . "application/json"))
     :body (json-encode '(("model" . "gpt-3.5-turbo")
                          ("messages" . [(("role" . "system")
@@ -77,3 +104,104 @@
 
 ;; https://api.coingecko.com/api/v3/coins/bitcoin
 ;; https://realtime.ably.io/sse
+
+
+(defun plz--default-process-filter (proc string)
+  "Insert STRING into the process buffer of PROC."
+  (when (buffer-live-p (process-buffer proc))
+    (with-current-buffer (process-buffer proc)
+      (let ((moving (= (point) (process-mark proc))))
+        (save-excursion
+          (goto-char (process-mark proc))
+          (insert string)
+          (set-marker (process-mark proc) (point)))
+        (if moving (goto-char (process-mark proc)))))))
+
+(defun plz--make-process-filter (separator-regex)
+  "Insert STRING into the process buffer of PROC."
+  (let (end-of-headers)
+    (lambda (proc string)
+      (plz--default-process-filter proc string)
+      (with-current-buffer (process-buffer proc)
+        (unless end-of-headers
+          (save-excursion
+            (goto-char (point-min))
+            (when (re-search-forward plz-http-end-of-headers-regexp nil t)
+              (setf end-of-headers (point)))))
+        (when end-of-headers
+          (goto-char end-of-headers)
+          (while (re-search-forward separator-regex nil t)
+            (let ((end (point)))
+              (goto-char (point-min))
+              (narrow-to-region (point-min) end)
+              (funcall (process-get proc :plz-then))
+              (widen)
+              (delete-region end-of-headers end)))
+          (goto-char (process-mark proc)))))))
+
+(defvar plz--stream-object-separator
+  (rx (or "\r\n" "\n")))
+
+(plz 'get "http://localhost/stream-bytes/5"
+  :filter #'plz--default-process-filter
+  :then (lambda (content)
+          (message "then: %s" content)))
+
+(plz 'get "http://localhost/stream/5"
+  ;; :filter (plz--make-process-filter plz--stream-object-separator)
+  :as 'response
+  :then (lambda (content)
+          (message "then: %s" content)))
+
+(plz 'get "http://localhost/stream/5"
+  :as #'json-read
+  :filter (plz--make-process-filter plz--stream-object-separator)
+  :then (lambda (content)
+          (message "then: %s" content))
+  :finally (lambda ()
+             (message "done")))
+
+(plz 'post "https://api.openai.com/v1/chat/completions"
+  :as #'json-read
+  :filter #'plz--process-filter
+  :headers `(("Authorization" . ,(format "Bearer %s"
+                                         (auth-source-pick-first-password :host "openai.com" :user "ellama")))
+             ("Content-Type" . "application/json"))
+  :body (json-encode '(("model" . "gpt-3.5-turbo")
+                       ("messages" . [(("role" . "system")
+                                       ("content" . "You are an assistant."))
+                                      (("role" . "user")
+                                       ("content" . "Which model are you running?"))])
+                       ("stream" . nil)))
+  :then (lambda (content)
+          (message "then: %s" content))
+  :else (lambda (error)
+          (message "ERROR: %s" error))
+  :finally (lambda ()
+             (message "Done")))
+
+(plz 'post "https://api.openai.com/v1/chat/completions"
+  :as 'response
+  :headers `(("Authorization" . ,(format "Bearer %s"
+                                         (auth-source-pick-first-password :host "openai.com" :user "ellama")))
+             ("Content-Type" . "application/json"))
+  :body (json-encode '(("model" . "gpt-3.5-turbo")
+                       ("messages" . [(("role" . "system")
+                                       ("content" . "You are an assistant."))
+                                      (("role" . "user")
+                                       ("content" . "Which model are you running?"))])
+                       ("stream" . nil)))
+  :then (lambda (content)
+          (message "then: %s" content))
+  :else (lambda (error)
+          (message "ERROR: %s" error))
+  :finally (lambda ()
+             (message "Done")))
+
+(plz 'post "http://localhost/post"
+  :headers '(("Content-Type" . "application/json"))
+  :filter #'plz--process-filter
+  :body  (json-encode (list (cons "key" "value")))
+  :as #'json-read
+  :then (lambda (response)
+          (message "THEN: %s" response)))
