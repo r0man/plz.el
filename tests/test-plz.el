@@ -404,7 +404,7 @@ in URL-encoded form)."
     (should (plz-response-p (plz-error-response err)))
     (should (eq 404 (plz-response-status (plz-error-response err))))))
 
-(plz-deftest plz-get-404-error-stream nil
+(plz-deftest plz-get-404-error-stream ()
   (let* ((else) (finally) (then) (through)
          (process (plz 'get (url "/get/status/404")
                     :as `(stream :through ,(lambda (process chunk)
@@ -458,6 +458,28 @@ in URL-encoded form)."
     (should (eq 28 (car (plz-error-curl-error plz-error))))
     (should (equal "Operation timeout." (cdr (plz-error-curl-error plz-error))))
     (should (< (time-to-seconds (time-subtract end-time start-time)) 1.1))))
+
+(plz-deftest plz-get-timeout-error-stream ()
+  (let* ((else) (finally) (then) (through)
+         (process (plz 'get (url "/delay/5")
+                    :as `(stream :through ,(lambda (process chunk)
+                                             (push (list process chunk) through)))
+                    :else (lambda (error)
+                            (push error else))
+                    :finally (lambda ()
+                               (push t finally))
+                    :timeout 1
+                    :then (lambda (response)
+                            (push response then)))))
+    (plz-test-wait process)
+    (should (equal '(t) finally))
+    (should (equal 1 (length else)))
+    (seq-doseq (err else)
+      (should (plz-error-p err))
+      (should (eq 28 (car (plz-error-curl-error err))))
+      (should (equal "Operation timeout." (cdr (plz-error-curl-error err)))))
+    (should (equal 0 (length then)))
+    (should (equal 0 (length through)))))
 
 ;;;;; Finally
 
