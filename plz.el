@@ -110,7 +110,7 @@
 ;;;; Structs
 
 (cl-defstruct plz-response
-  version status headers body)
+  version status headers body process)
 
 (cl-defstruct plz-error
   curl-error response message)
