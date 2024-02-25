@@ -404,6 +404,28 @@ in URL-encoded form)."
     (should (plz-response-p (plz-error-response err)))
     (should (eq 404 (plz-response-status (plz-error-response err))))))
 
+(plz-deftest plz-get-404-error-stream nil
+  (let* ((err)
+         (chunks)
+         (then-response)
+         (process (plz 'get (url "/get/status/404")
+                    :as `(stream :through ,(lambda (_process chunk)
+                                             (push chunk chunks)))
+                    :then (lambda (response)
+                            (setf then-response response))
+                    :else (lambda (e)
+                            (setf err e)))))
+    (plz-test-wait process)
+    (should (equal 1 (length chunks)))
+    (should (string-match "404 Not Found" (string-join chunks "")))
+    (let ((response then-response))
+      (should (plz-response-p response))
+      (should (eq 404 (plz-response-status response))))
+    (let ((response (plz-error-response err)))
+      (should (plz-error-p err))
+      (should (plz-response-p response))
+      (should (eq 404 (plz-response-status response))))))
+
 (plz-deftest plz-get-timeout-error-sync nil
   (pcase-let* ((start-time (current-time))
                (`(,_signal . (,_message ,(cl-struct plz-error (curl-error `(,code . ,message)))))
