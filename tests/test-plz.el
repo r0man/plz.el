@@ -393,7 +393,6 @@ in URL-encoded form)."
                             (push error else))
                     :finally (lambda ()
                                (push t finally))
-                    :timeout 1
                     :then (lambda (response)
                             (push response then)))))
     (plz-test-wait process)
@@ -405,26 +404,6 @@ in URL-encoded form)."
       (should (string-match "Couldn't resolve host" (cdr (plz-error-curl-error err)))))
     (should (equal 0 (length then)))
     (should (equal 0 (length through)))))
-
-(plz-deftest plz-get-404-error-sync  nil
-  (pcase-let ((`(,_signal . (,_message ,data))
-	       (should-error (plz 'get (url "/get/status/404")
-			       :as 'string :then 'sync)
-                             :type 'plz-error)))
-    (should (plz-error-p data))
-    (should (plz-response-p (plz-error-response data)))
-    (should (eq 404 (plz-response-status (plz-error-response data))))))
-
-(plz-deftest plz-get-404-error-async nil
-  (let* ((err)
-         (process (plz 'get (url "/get/status/404")
-                    :as 'string :then #'ignore
-                    :else (lambda (e)
-                            (setf err e)))))
-    (plz-test-wait process)
-    (should (plz-error-p err))
-    (should (plz-response-p (plz-error-response err)))
-    (should (eq 404 (plz-response-status (plz-error-response err))))))
 
 (plz-deftest plz-get-404-error-stream ()
   (let* ((else) (finally) (then) (through)
@@ -456,6 +435,48 @@ in URL-encoded form)."
     (should (string-match "404 Not Found"
                           (string-join (seq-map #'cl-second (reverse through)) "")))))
 
+(plz-deftest plz-get-404-error-sync  nil
+  (pcase-let ((`(,_signal . (,_message ,data))
+	       (should-error (plz 'get (url "/get/status/404")
+			       :as 'string :then 'sync)
+                             :type 'plz-error)))
+    (should (plz-error-p data))
+    (should (plz-response-p (plz-error-response data)))
+    (should (eq 404 (plz-response-status (plz-error-response data))))))
+
+(plz-deftest plz-get-404-error-async nil
+  (let* ((err)
+         (process (plz 'get (url "/get/status/404")
+                    :as 'string :then #'ignore
+                    :else (lambda (e)
+                            (setf err e)))))
+    (plz-test-wait process)
+    (should (plz-error-p err))
+    (should (plz-response-p (plz-error-response err)))
+    (should (eq 404 (plz-response-status (plz-error-response err))))))
+
+(plz-deftest plz-get-timeout-error-stream ()
+  (let* ((else) (finally) (then) (through)
+         (process (plz 'get (url "/delay/5")
+                    :as `(stream :through ,(lambda (process chunk)
+                                             (push (list process chunk) through)))
+                    :else (lambda (error)
+                            (push error else))
+                    :finally (lambda ()
+                               (push t finally))
+                    :timeout 1
+                    :then (lambda (response)
+                            (push response then)))))
+    (plz-test-wait process)
+    (should (equal '(t) finally))
+    (should (equal 1 (length else)))
+    (seq-doseq (err else)
+      (should (plz-error-p err))
+      (should (eq 28 (car (plz-error-curl-error err))))
+      (should (equal "Operation timeout." (cdr (plz-error-curl-error err)))))
+    (should (equal 0 (length then)))
+    (should (equal 0 (length through)))))
+
 (plz-deftest plz-get-timeout-error-sync nil
   (pcase-let* ((start-time (current-time))
                (`(,_signal . (,_message ,(cl-struct plz-error (curl-error `(,code . ,message)))))
@@ -480,28 +501,6 @@ in URL-encoded form)."
     (should (eq 28 (car (plz-error-curl-error plz-error))))
     (should (equal "Operation timeout." (cdr (plz-error-curl-error plz-error))))
     (should (< (time-to-seconds (time-subtract end-time start-time)) 1.1))))
-
-(plz-deftest plz-get-timeout-error-stream ()
-  (let* ((else) (finally) (then) (through)
-         (process (plz 'get (url "/delay/5")
-                    :as `(stream :through ,(lambda (process chunk)
-                                             (push (list process chunk) through)))
-                    :else (lambda (error)
-                            (push error else))
-                    :finally (lambda ()
-                               (push t finally))
-                    :timeout 1
-                    :then (lambda (response)
-                            (push response then)))))
-    (plz-test-wait process)
-    (should (equal '(t) finally))
-    (should (equal 1 (length else)))
-    (seq-doseq (err else)
-      (should (plz-error-p err))
-      (should (eq 28 (car (plz-error-curl-error err))))
-      (should (equal "Operation timeout." (cdr (plz-error-curl-error err)))))
-    (should (equal 0 (length then)))
-    (should (equal 0 (length through)))))
 
 ;;;;; Finally
 
@@ -716,6 +715,17 @@ and only called once."
     (seq-doseq (response then)
       (should (plz-response-p response))
       (should (eq 200 (plz-response-status response))))
+    (should (equal 1 (length through)))
+    (seq-doseq (args through)
+      (should (processp (car args)))
+      (should (stringp (cadr args))))))
+
+(plz-deftest plz-get-stream-no-then ()
+  (let* ((through)
+         (process (plz 'get (url "/stream/1")
+                    :as `(stream :through ,(lambda (process chunk)
+                                             (push (list process chunk) through))))))
+    (plz-test-wait process)
     (should (equal 1 (length through)))
     (seq-doseq (args through)
       (should (processp (car args)))

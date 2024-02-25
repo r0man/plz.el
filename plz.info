@@ -162,6 +162,18 @@ from the data:
 
      (image :type jpeg :data ""ÿØÿà^@^PJFIF...")
 
+   Asynchronously stream the HTTP body in chunks using a process filter
+(https://www.gnu.org/software/emacs/manual/html_node/elisp/Filter-Functions.html)
+function.  The function is called repeatedly, whenever a new chunk of
+the HTTP body arrives.
+
+     (plz 'get "https://httpbin.org/stream/100"
+       :as `(stream
+             :through ,(lambda (process chunk)
+                         (message "Chunk:\n %s\n\n" chunk))))
+
+     #<process plz-request-curl<1>>
+
 
 File: README.info,  Node: Functions,  Next: Queueing,  Prev: Examples,  Up: Usage
 
@@ -196,10 +208,15 @@ File: README.info,  Node: Functions,  Next: Queueing,  Prev: Examples,  Up: Usag
         • ‘response’ to pass a ‘plz-response’ structure.
         • ‘file’ to pass a temporary filename to which the response body
           has been saved without decoding.
-        • ‘(file ~FILENAME)’ to pass ‘FILENAME’ after having saved the
+        • ‘(file FILENAME)’ to pass ‘FILENAME’ after having saved the
           response body to it without decoding.  ‘FILENAME’ must be a
           non-existent file; if it exists, it will not be overwritten,
           and an error will be signaled.
+        • ‘(stream :through PROCESS-FILTER)’ to asynchronously stream
+          the HTTP response.  ‘PROCESS-FILTER’ is an Emacs process
+          filter function, and must accept two arguments: the curl
+          process sending the request and a chunk of the HTTP body,
+          which was just received.
         • A function, which is called in the response buffer with it
           narrowed to the response body (suitable for, e.g.
           ‘json-read’).
@@ -237,16 +254,12 @@ File: README.info,  Node: Functions,  Next: Queueing,  Prev: Examples,  Up: Usag
      how long it takes to connect to a host and to receive a response
      from a host, respectively.
 
-     If ‘STREAM’ is non-nil, a ‘THEN’ callback must be given and the
-     response will be streamed in chunks.  The ‘THEN’ function is
-     invoked for each incoming chunk, receiving the current chunk as its
-     parameter.  The type of object passed to the THEN callback depends
-     on the AS argument.  When using this option, the buffering in the
-     underlying curl output stream is turned off, and there are no
+     When the HTTP response is streamed, the buffering in the curl
+     output stream is turned off and the PROCESS-FILTER may be called
+     multiple times, depending on the size of the HTTP body.  It is the
+     user’s responsibility to understand and process each chunk, and to
+     construct the finalized response if necessary.  There are no
      guarantees regarding the chunk, such as being line-based or not.
-     It is the user’s responsibility to understand and process each
-     chunk, and to construct the finalized response if necessary.  Use
-     the ‘FINALLY’ callback to determine when the request is complete.
 
      ‘NOQUERY’ is passed to ‘make-process’, which see.
 
@@ -592,29 +605,29 @@ Node: GNU ELPA1370
 Node: Manual1616
 Node: Usage1922
 Node: Examples2423
-Node: Functions3790
-Node: Queueing8204
-Node: Tips9587
-Node: Changelog9888
-Node: 08-pre10196
-Node: 07210303
-Node: 07110602
-Node: 0710815
-Node: 0612703
-Node: 05413314
-Node: 05313557
-Node: 05213873
-Node: 05114080
-Node: 0514332
-Node: 0414540
-Node: 0315448
-Node: 02115898
-Node: 0216049
-Node: 0116180
-Node: Credits16276
-Node: Development16642
-Node: Copyright assignment17156
-Node: License17744
+Node: Functions4253
+Node: Queueing8686
+Node: Tips10069
+Node: Changelog10370
+Node: 08-pre10678
+Node: 07210785
+Node: 07111084
+Node: 0711297
+Node: 0613185
+Node: 05413796
+Node: 05314039
+Node: 05214355
+Node: 05114562
+Node: 0514814
+Node: 0415022
+Node: 0315930
+Node: 02116380
+Node: 0216531
+Node: 0116662
+Node: Credits16758
+Node: Development17124
+Node: Copyright assignment17638
+Node: License18226
 
 End Tag Table
 

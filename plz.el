@@ -292,6 +292,12 @@ It may be:
   non-existent file; if it exists, it will not be overwritten,
   and an error will be signaled.
 
+- `(stream :through PROCESS-FILTER)' to asynchronously stream the
+  HTTP response.  PROCESS-FILTER is an Emacs process filter
+  function, and must accept two arguments: the curl process
+  sending the request and a chunk of the HTTP body, which was
+  just received.
+
 - A function, which is called in the response buffer with it
   narrowed to the response body (suitable for, e.g. `json-read').
 
@@ -328,20 +334,15 @@ CONNECT-TIMEOUT and TIMEOUT are a number of seconds that limit
 how long it takes to connect to a host and to receive a response
 from a host, respectively.
 
-If STREAM is non-nil, a THEN callback must be given and the
-response will be streamed in chunks.  The THEN function is
-invoked for each incoming chunk, receiving the current chunk as
-its parameter.  The type of object passed to the THEN callback
-depends on the AS argument.  When using this option, the
-buffering in the underlying curl output stream is turned off, and
-there are no guarantees regarding the chunk, such as being
-line-based or not.  It is the user's responsibility to understand
-and process each chunk, and to construct the finalized response
-if necessary.  Use the FINALLY callback to determine when the
-request is complete.
-
 NOQUERY is passed to `make-process', which see.
 
+When the HTTP response is streamed, the buffering in the curl
+output stream is turned off and the PROCESS-FILTER may be called
+multiple times, depending on the size of the HTTP body.  It is
+the user's responsibility to understand and process each chunk,
+and to construct the finalized response if necessary.  There are
+no guarantees regarding the chunk, such as being line-based or
+not.
 \(To silence checkdoc, we mention the internal argument REST.)"
   ;; FIXME(v0.8): Remove the note about error changes from the docstring.
   ;; FIXME(v0.8): Update error signals in docstring.
@@ -362,7 +363,7 @@ NOQUERY is passed to `make-process', which see.
                             (unless (plist-get options :through)
                               (signal 'plz-error (make-plz-error :message "missing :through function")))
                             (when (eq 'sync then)
-                              (signal 'plz-error (make-plz-error :message "streaming can only be used with asynchronous requests")))
+                              (setf then nil))
                             options)))
          (curl-command-line-args (append plz-curl-default-args
                                          (list "--config" "-")))
@@ -500,7 +501,7 @@ NOQUERY is passed to `make-process', which see.
                    (funcall then (make-plz-error :message (format "error while writing to file %S: %S" filename err)))))))
        (`(stream . ,_options)
         (lambda (&optional response)
-          (when response
+          (when (and response (functionp then))
             (funcall then response))))
        ((pred functionp) (lambda ()
                            (let ((coding-system (or (plz--coding-system) 'utf-8)))
@@ -789,7 +790,8 @@ argument passed to `plz--sentinel', which see."
              ((and status (guard (<= 200 status 299)))
               ;; Any 2xx response is considered successful.
               (ignore status) ; Byte-compiling in Emacs <28 complains without this.
-              (funcall (process-get process :plz-then)))
+              (when-let (then (process-get process :plz-then))
+                (funcall then)))
              (_
               ;; TODO: If using ":as 'response", the HTTP response
               ;; should be passed to the THEN function, regardless
@@ -951,13 +953,14 @@ STRING is the string of output from the process."
                      (status (string-to-number (match-string 2)))
                      (headers (plz--headers))
                      (options (process-get proc :plz-stream-options))
-                     (filter (plist-get options :through)))
-                (funcall (process-get proc :plz-then)
-                         (make-plz-response
-                          :headers headers
-                          :process proc
-                          :status status
-                          :version version))
+                     (filter (plist-get options :through))
+                     (then (process-get proc :plz-then)))
+                (when (functionp then)
+                  (funcall then (make-plz-response
+                                 :headers headers
+                                 :process proc
+                                 :status status
+                                 :version version)))
                 (re-search-forward plz-http-end-of-headers-regexp nil)
                 (let ((chunk (delete-and-extract-region (point) (point-max))))
                   (set-marker (process-mark proc) (point))
