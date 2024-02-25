@@ -384,6 +384,28 @@ in URL-encoded form)."
     (should (equal '(6 . "Couldn't resolve host. The given remote host was not resolved.")
                    (plz-error-curl-error data)))))
 
+(plz-deftest plz-get-curl-error-stream ()
+  (let* ((else) (finally) (then) (through)
+         (process (plz 'get (url "https://httpbinnnnnn.org/get/status/404")
+                    :as `(stream :through ,(lambda (process chunk)
+                                             (push (list process chunk) through)))
+                    :else (lambda (error)
+                            (push error else))
+                    :finally (lambda ()
+                               (push t finally))
+                    :timeout 1
+                    :then (lambda (response)
+                            (push response then)))))
+    (plz-test-wait process)
+    (should (equal '(t) finally))
+    (should (equal 1 (length else)))
+    (seq-doseq (err else)
+      (should (plz-error-p err))
+      (should (eq 6 (car (plz-error-curl-error err))))
+      (should (string-match "Couldn't resolve host" (cdr (plz-error-curl-error err)))))
+    (should (equal 0 (length then)))
+    (should (equal 0 (length through)))))
+
 (plz-deftest plz-get-404-error-sync  nil
   (pcase-let ((`(,_signal . (,_message ,data))
 	       (should-error (plz 'get (url "/get/status/404")
