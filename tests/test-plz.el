@@ -559,88 +559,41 @@ and only called once."
 
 ;; TODO: Add test for canceling queue.
 
-(plz-deftest plz-get-stream-as-binary ()
+(plz-deftest plz-get-stream-with-one-chunk ()
   (let* ((expected-body)
-         (process-1 (plz 'get (url "/stream/100000")
-                      :as 'binary
+         (process-1 (plz 'get (url "/stream/1")
                       :then (lambda (body)
                               (setq expected-body body))))
          (chunks)
-         (process-2 (plz 'get (url "/stream/100000")
-                      :as 'binary
-                      :stream t
-                      :then (lambda (chunk)
-                              (push chunk chunks)))))
-    (plz-test-wait process-1)
-    (plz-test-wait process-2)
-    (should (equal expected-body (string-join (reverse chunks) "")))
-    (should (> (length chunks) 1))))
-
-(plz-deftest plz-get-stream-as-buffer ()
-  (let* ((expected-body)
-         (process-1 (plz 'get (url "/stream/100000")
-                      :then (lambda (body)
-                              (setq expected-body body))))
-         (chunks)
-         (process-2 (plz 'get (url "/stream/100000")
-                      :as 'buffer
-                      :stream t
-                      :then (lambda (buffer)
-                              (push (with-current-buffer buffer
-                                      (buffer-string))
-                                    chunks)))))
-    (plz-test-wait process-1)
-    (plz-test-wait process-2)
-    (should (equal expected-body (string-join (reverse chunks) "")))
-    (should (> (length chunks) 1))))
-
-(plz-deftest plz-get-stream-as-function ()
-  (let* ((expected-body)
-         (process-1 (plz 'get (url "/stream/100000")
-                      :as 'binary
-                      :then (lambda (body)
-                              (setq expected-body body))))
-         (chunks)
-         (process-2 (plz 'get (url "/stream/100000")
-                      :as #'buffer-string
-                      :stream t
-                      :then (lambda (chunk)
-                              (push chunk chunks)))))
-    (plz-test-wait process-1)
-    (plz-test-wait process-2)
-    (should (equal expected-body (string-join (reverse chunks) "")))
-    (should (> (length chunks) 1))))
-
-(plz-deftest plz-get-stream-as-response ()
-  (let* ((expected-body)
-         (process-1 (plz 'get (url "/stream/100000")
-                      :then (lambda (body)
-                              (setq expected-body body))))
-         (chunks)
-         (process-2 (plz 'get (url "/stream/100000")
-                      :as 'response
-                      :stream t
+         (process-2 (plz 'get (url "/stream/1")
+                      :as `(stream :through ,(lambda (_process chunk)
+                                               (push chunk chunks)))
                       :then (lambda (response)
                               (let ((headers (plz-response-headers response)))
                                 (should (equal 200 (plz-response-status response)))
-                                (should (equal "application/json" (alist-get 'content-type headers)))
-                                (push (plz-response-body response) chunks))))))
+                                (should (null (plz-response-body response)))
+                                (should (equal "application/json"
+                                               (alist-get 'content-type headers))))))))
     (plz-test-wait process-1)
     (plz-test-wait process-2)
     (should (equal expected-body (string-join (reverse chunks) "")))
-    (should (> (length chunks) 1))))
+    (should (equal (length chunks) 1))))
 
-(plz-deftest plz-get-stream-as-string ()
+(plz-deftest plz-get-stream-with-many-chunks ()
   (let* ((expected-body)
          (process-1 (plz 'get (url "/stream/100000")
                       :then (lambda (body)
                               (setq expected-body body))))
          (chunks)
          (process-2 (plz 'get (url "/stream/100000")
-                      :as 'string
-                      :stream t
-                      :then (lambda (chunk)
-                              (push chunk chunks)))))
+                      :as `(stream :through ,(lambda (_process chunk)
+                                               (push chunk chunks)))
+                      :then (lambda (response)
+                              (let ((headers (plz-response-headers response)))
+                                (should (equal 200 (plz-response-status response)))
+                                (should (null (plz-response-body response)))
+                                (should (equal "application/json"
+                                               (alist-get 'content-type headers))))))))
     (plz-test-wait process-1)
     (plz-test-wait process-2)
     (should (equal expected-body (string-join (reverse chunks) "")))
