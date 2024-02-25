@@ -100,6 +100,15 @@ Synchronously download a JPEG file, then create an Emacs image object from the d
 #+RESULTS[fbe8a6c8cb097ac08e992ea90bdbd50e7337a385]:
 : (image :type jpeg :data ""ÿØÿà^@^PJFIF...")
 
+Asynchronously stream the HTTP body in chunks using a [[https://www.gnu.org/software/emacs/manual/html_node/elisp/Filter-Functions.html][process filter]] function. The function is called repeatedly, whenever a new chunk of the HTTP body arrives.
+
+#+BEGIN_SRC elisp :exports both :cache yes
+  (plz 'get "https://httpbin.org/stream/100"
+    :as `(stream
+          :through ,(lambda (process chunk)
+                      (message "Chunk:\n %s\n\n" chunk))))
+#+END_SRC
+
 ** Functions
 
 +  ~plz~ :: /(method url &key headers body else finally noquery (as 'string) (then 'sync) (body-type 'text) (decode t decode-s) (connect-timeout plz-connect-timeout) (timeout plz-timeout))/
@@ -119,7 +128,8 @@ Synchronously download a JPEG file, then create an Emacs image object from the d
    - ~string~ to pass the response body as a decoded string.
    - ~response~ to pass a ~plz-response~ structure.
    - ~file~ to pass a temporary filename to which the response body has been saved without decoding.
-   - ~(file ~FILENAME)~ to pass ~FILENAME~ after having saved the response body to it without decoding.  ~FILENAME~ must be a non-existent file; if it exists, it will not be overwritten, and an error will be signaled.
+   - ~(file FILENAME)~ to pass ~FILENAME~ after having saved the response body to it without decoding.  ~FILENAME~ must be a non-existent file; if it exists, it will not be overwritten, and an error will be signaled.
+   - ~(stream :through PROCESS-FILTER)~ to asynchronously stream the HTTP response.  ~PROCESS-FILTER~ is an Emacs process filter function, and must accept two arguments: the curl process sending the request and a chunk of the HTTP body, which was just received.  
    - A function, which is called in the response buffer with it narrowed to the response body (suitable for, e.g. ~json-read~).
 
    If ~DECODE~ is non-nil, the response body is decoded automatically.  For binary content, it should be nil.  When ~AS~ is ~binary~, ~DECODE~ is automatically set to nil.
@@ -133,11 +143,11 @@ Synchronously download a JPEG file, then create an Emacs image object from the d
    ~FINALLY~ is an optional function called without argument after ~THEN~ or ~ELSE~, as appropriate.  For synchronous requests, this argument is ignored.
 
    ~CONNECT-TIMEOUT~ and ~TIMEOUT~ are a number of seconds that limit how long it takes to connect to a host and to receive a response from a host, respectively.
-      
-   If ~STREAM~ is non-nil, a ~THEN~ callback must be given and the response will be streamed in chunks.  The ~THEN~ function is invoked for each incoming chunk, receiving the current chunk as its parameter.  The type of object passed to the THEN callback depends on the AS argument.  When using this option, the buffering in the underlying curl output stream is turned off, and there are no guarantees regarding the chunk, such as being line-based or not.  It is the user's responsibility to understand and process each chunk, and to construct the finalized response if necessary.  Use the ~FINALLY~ callback to determine when the request is complete.
 
    ~NOQUERY~ is passed to ~make-process~, which see.
 
+   When the HTTP response is streamed, the buffering in the curl output stream is turned off and the PROCESS-FILTER may be called multiple times, depending on the size of the HTTP body.  It is the user's responsibility to understand and process each chunk, and to construct the finalized response if necessary.  There are no guarantees regarding the chunk, such as being line-based or not.
+   
 ** Queueing
 
 ~plz~ provides a simple system for queueing HTTP requests.  First, make a ~plz-queue~ struct by calling ~make-plz-queue~.  Then call ~plz-queue~ with the struct as the first argument, and the rest of the arguments being the same as those passed to ~plz~.  Then call ~plz-run~ to run the queued requests.
