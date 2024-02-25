@@ -937,37 +937,35 @@ PROC is the process object.
 STRING is the string of output from the process."
   (when (buffer-live-p (process-buffer proc))
     (with-current-buffer (process-buffer proc)
-      ;; Do what a process filter has to do ...
       (let ((moving (= (point) (process-mark proc))))
         (save-excursion
           (goto-char (process-mark proc))
           (insert string)
           (set-marker (process-mark proc) (point)))
-        (when moving
-          (goto-char (process-mark proc))))
-      ;; Maybe invoke THEN and THROUGH callbacks and set THROUGH to be
-      ;; the new process filter.
-      (save-excursion
-        (goto-char (point-min))
-        (when (looking-at plz-http-response-status-line-regexp)
-          (let ((version (string-to-number (match-string 1)))
-                (status (string-to-number (match-string 2)))
-                (headers (plz--headers)))
-            (when (and headers status version)
-              ;; Call the THEN callback with response (without a body).
-              (let* ((options (process-get proc :plz-stream-options))
-                     (filter (plist-get options :through))
-                     (response (make-plz-response
-                                :headers headers
-                                :process proc
-                                :status status
-                                :version version)))
-                (funcall (process-get proc :plz-then) response)
+        (save-excursion
+          (goto-char (point-min))
+          (when (re-search-forward plz-http-end-of-headers-regexp nil t)
+            (goto-char (point-min))
+            (when (looking-at plz-http-response-status-line-regexp)
+              (let* ((version (string-to-number (match-string 1)))
+                     (status (string-to-number (match-string 2)))
+                     (headers (plz--headers))
+                     (options (process-get proc :plz-stream-options))
+                     (filter (plist-get options :through)))
+                (funcall (process-get proc :plz-then)
+                         (make-plz-response
+                          :headers headers
+                          :process proc
+                          :status status
+                          :version version))
                 (re-search-forward plz-http-end-of-headers-regexp nil)
                 (let ((chunk (delete-and-extract-region (point) (point-max))))
+                  (set-marker (process-mark proc) (point))
                   (unless (zerop (length chunk))
                     (funcall filter proc chunk)))
-                (set-process-filter proc filter)))))))))
+                (set-process-filter proc filter)))))
+        (when moving
+          (goto-char (process-mark proc)))))))
 
 ;;;; Footer
 
