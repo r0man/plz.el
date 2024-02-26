@@ -98,6 +98,7 @@
 ;;;; Requirements
 
 (require 'cl-lib)
+(require 'map)
 (require 'rx)
 (require 'subr-x)
 
@@ -359,12 +360,12 @@ not.
                      ('binary "--data-binary")
                      ('text "--data")))
          (stream-options (pcase as
-                           (`(stream . ,options)
-                            (unless (plist-get options :through)
+                           (`(stream . ,(map (:through through)))
+                            (unless through
                               (signal 'plz-error (make-plz-error :message "missing :through function")))
                             (when (eq 'sync then)
                               (setf then nil))
-                            options)))
+                            (cdr as))))
          (curl-command-line-args (append plz-curl-default-args
                                          (list "--config" "-")))
          (curl-config-header-args (cl-loop for (key . value) in headers
