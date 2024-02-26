@@ -961,25 +961,18 @@ called multiple times, for each chunk of the received HTTP body."
           (goto-char (point-min))
           (when (re-search-forward plz-http-end-of-headers-regexp nil t)
             (goto-char (point-min))
-            (when (looking-at plz-http-response-status-line-regexp)
-              (let* ((version (string-to-number (match-string 1)))
-                     (status (string-to-number (match-string 2)))
-                     (headers (plz--headers))
-                     (options (process-get proc :plz-stream-options))
-                     (filter (plist-get options :through))
-                     (then (process-get proc :plz-then)))
-                (when (functionp then)
-                  (funcall then (make-plz-response
-                                 :headers headers
-                                 :process proc
-                                 :status status
-                                 :version version)))
-                (re-search-forward plz-http-end-of-headers-regexp nil)
-                (let ((chunk (delete-and-extract-region (point) (point-max))))
-                  (set-marker (process-mark proc) (point))
-                  (unless (zerop (length chunk))
-                    (funcall filter proc chunk)))
-                (set-process-filter proc filter)))))
+            (let* ((response (plz--response))
+                   (options (process-get proc :plz-stream-options))
+                   (filter (plist-get options :through))
+                   (then (process-get proc :plz-then)))
+              (when (functionp then)
+                (funcall then response))
+              (let ((chunk (delete-and-extract-region (point) (point-max))))
+                (set-marker (process-mark proc) (point))
+                (widen)
+                (unless (zerop (length chunk))
+                  (funcall filter proc chunk)))
+              (set-process-filter proc filter))))
         (when moving
           (goto-char (process-mark proc)))))))
 
