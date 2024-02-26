@@ -937,7 +937,19 @@ Assumes point is at start of HTTP response."
 
 PROC is the process object.
 
-STRING is the string of output from the process."
+STRING is the string of output from the process.
+
+When streaming a HTTP response there are two process filters
+involved, at different stages.  This is the process filter for
+the first stage, which is responsible for receiving the HTTP
+status and headers.  Once status and headers are received, this
+process filter invokes the THEN callback with a response
+structure containing the status, headers and process slots, but
+without a body.
+
+In the second stage, the process filter of the curl process is
+changed to the user provided PROCCESS-FILTER and it will be
+called multiple times, for each chunk of the received HTTP body."
   (when (buffer-live-p (process-buffer proc))
     (with-current-buffer (process-buffer proc)
       (let ((moving (= (point) (process-mark proc))))
