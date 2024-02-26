@@ -384,6 +384,7 @@ in URL-encoded form)."
     (should (equal '(6 . "Couldn't resolve host. The given remote host was not resolved.")
                    (plz-error-curl-error data)))))
 
+;; FIXME: This test also works interactively but sometimes fails in batch mode.
 (plz-deftest plz-get-curl-error-stream ()
   (let* ((else) (finally) (then) (through)
          (process (plz 'get (url "https://httpbinnnnnn.org/get/status/404")
