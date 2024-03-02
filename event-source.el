@@ -259,11 +259,7 @@
   (with-slots (handlers) source
     (dolist (pair handlers)
       (when (equal (car pair) (oref event type))
-        (condition-case error
-            (funcall (cdr pair) source event)
-          (error
-           (message "Error in event handler for event type %s:\n  %s\n"
-                    (oref event type) error)))))))
+        (funcall (cdr pair) source event)))))
 
 (defun event-source-dispatch-events (source events)
   "Dispatch the EVENTS to the listeners of event SOURCE."
