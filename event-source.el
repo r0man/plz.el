@@ -26,9 +26,8 @@
   ((data
     :accessor event-source-event-data
     :initarg :data
-    :initform ""
-    :documentation "The event data."
-    :type string)
+    :initform nil
+    :documentation "The event data.")
    (last-event-id
     :accessor event-source-event-last-event-id
     :initarg :last-event-id
