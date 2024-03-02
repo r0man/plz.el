@@ -328,7 +328,10 @@ CHUNK is a part of the HTTP body."
               (setf ready-state 'open)
               (setf response response))
             (widen)
-            (event-source-dispatch-event source (event-source-event :type "open")))))
+            (event-source-dispatch-event
+             source (event-source-event
+                     :data response
+                     :type "open")))))
         (when moving
           (goto-char (process-mark process)))))))
 
@@ -347,10 +350,16 @@ CHUNK is a part of the HTTP body."
                       :else (lambda (object)
                               (setf errors (push object errors))
                               (setf response (plz-error-response object))
-                              (event-source-dispatch-event source (event-source-event :type "error")))
+                              (event-source-dispatch-event
+                               source (event-source-event
+                                       :data object
+                                       :type "error")))
                       :finally (lambda ()
                                  (setf ready-state 'closed)
-                                 (event-source-dispatch-event source (event-source-event :type "close")))))
+                                 (event-source-dispatch-event
+                                  source (event-source-event
+                                          :data response
+                                          :type "close")))))
       (set-process-filter process (lambda (process chunk)
                                     (event-source--plz-process-filter source process chunk)))
       source)))
