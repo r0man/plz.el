@@ -316,10 +316,8 @@
       (setf parser (event-source-parser
                     :buffer buffer
                     :position (save-excursion
-                                (widen)
                                 (goto-char (point-min))
                                 (re-search-forward plz-http-end-of-headers-regexp)
-                                (message "Position: %s" (point))
                                 (point))))
       (setf ready-state 'open)
       (event-source-dispatch-event source (event-source-event :type "open"))
