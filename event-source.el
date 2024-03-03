@@ -201,15 +201,16 @@
     (with-current-buffer (get-buffer buffer)
       (goto-char (point-min))
       (while (not (eobp))
-        (let ((line (event-source--parse-line)))
-          (event-source--process-line parser line))))))
+        (whenlet ((line (event-source--parse-line)))
+                 (event-source--process-line parser line))))))
 
 (defun event-source-parser-insert (parser string)
   "Insert STRING into the buffer of the event PARSER."
-  (with-slots (buffer position) parser
+  (with-slots (buffer events position) parser
     (with-current-buffer (get-buffer buffer)
       (insert string)
-      (event-source-parse-stream parser))))
+      (while (event-source-parse-line parser))
+      events)))
 
 ;; Event Source
 
@@ -279,7 +280,6 @@
 (defun event-source-dispatch-events (source events)
   "Dispatch the EVENTS to the listeners of event SOURCE."
   (dolist (event (reverse events))
-    (message "Dispatching event %s" event)
     (event-source-dispatch-event source event)))
 
 (defun event-source--response-in-buffer-p ()
@@ -311,12 +311,19 @@
 (cl-defmethod event-source-open ((source buffer-event-source))
   "Open a connection to the URL of the event SOURCE."
   (with-slots (buffer errors options ready-state parser) source
-    (setf ready-state 'connecting)
-    (setf parser (event-source-parser :buffer buffer))
-    (when (get-buffer buffer)
+    (with-current-buffer (get-buffer-create buffer)
+      (setf ready-state 'connecting)
+      (setf parser (event-source-parser
+                    :buffer buffer
+                    :position (save-excursion
+                                (widen)
+                                (goto-char (point-min))
+                                (re-search-forward plz-http-end-of-headers-regexp)
+                                (message "Position: %s" (point))
+                                (point))))
+      (setf ready-state 'open)
       (event-source-dispatch-event source (event-source-event :type "open"))
-      (setf ready-state 'open))
-    source))
+      source)))
 
 (cl-defmethod event-source-close ((source buffer-event-source))
   "Close the connection of the event SOURCE."
@@ -417,29 +424,46 @@ CHUNK is a part of the HTTP body."
 (defun event-source-text-event-stream (handlers)
   "The default PROCESS filter for a text/event-stream HTTP RESPONSE."
   (lambda (process response)
-    (cond
-     ((not (process-get process :plz-event-source))
-      (let ((event-source (buffer-event-source
-                           :buffer (buffer-name (current-buffer))
-                           :handlers handlers)))
-        (process-put process :plz-event-source event-source)
-        (event-source-open event-source)
-        (event-source-insert event-source (plz-response-body response))))
-     ((process-get process :plz-event-source)
-      (plz-stream-handler-default process response)))))
-
-;; (setq plz-stream-content-types
-;;       `(("text/event-stream"
-;;          . ,(event-source-text-event-stream
-;;              `(("open" . (lambda (source event)
-;;                            (message "open: %s" event)))
-;;                ("message" . (lambda (source event)
-;;                               (message "message: %s" event)))
-;;                ("error" . (lambda (source event)
-;;                             (message "error: %s" event)))
-;;                ("close" . (lambda (source event)
-;;                             (message "close: %s" event))))))
-;;         (t . plz-stream-handler-default)))
+    (unless (process-get process :plz-event-source)
+      (process-put process :plz-event-source
+                   (event-source-open
+                    (buffer-event-source
+                     :buffer (buffer-name (current-buffer))
+                     :handlers handlers))))
+    (event-source-insert (process-get process :plz-event-source)
+                         (plz-response-body response))
+    (set-marker (process-mark process) (point))
+    (widen)))
 
 (provide 'event-source)
 ;;; event-source.el ends here
+
+(let ((api-key (auth-source-pick-first-password :host "openai.com" :user "ellama")))
+  (plz-stream 'post "https://api.openai.com/v1/chat/completions"
+    :as `(stream :handlers (("text/event-stream"
+                             . ,(event-source-text-event-stream
+                                 `(("open" . (lambda (source event)
+                                               (message "open: %s" event)))
+                                   ("message" . (lambda (source event)
+                                                  (message "message: %s" event)))
+                                   ("error" . (lambda (source event)
+                                                (message "error: %s" event)))
+                                   ("close" . (lambda (source event)
+                                                (message "close: %s" event))))))
+                            (t . plz-stream-default-handler)))
+    :body (json-encode
+           '(("model" . "gpt-3.5-turbo")
+             ("messages" . [(("role" . "system")
+                             ("content" . "You are an assistant."))
+                            (("role" . "user")
+                             ("content" . "Which model are you running?"))])
+             ("stream" . t)))
+    :headers `(("Authorization" . ,(format "Bearer %s" api-key))
+               ("Content-Type" . "application/json"))
+    :else (lambda (response)
+            (message "Else!"))
+    :finally (lambda ()
+               (message "Finally!"))
+    :then (lambda (response)
+            (message "Then!")
+            (setq my-response response))))

@@ -33,7 +33,7 @@
 (require 'cl-lib)
 (require 'plz)
 
-(defun plz-stream-handler-default (process response)
+(defun plz-stream-default-handler (process response)
   "The default PROCESS filter for a streaming HTTP RESPONSE."
   (save-excursion
     (goto-char (process-mark process))
@@ -41,7 +41,7 @@
     (set-marker (process-mark process) (point))))
 
 (defvar plz-stream-content-types
-  '((t . plz-stream-handler-default))
+  '((t . plz-stream-default-handler))
   "Alist of content types and their corresponding handlers.")
 
 (defun plz-stream--response-content-type (response)
@@ -52,9 +52,11 @@
 
 (defun plz-stream--response-handler (process response)
   "Return the handler for PROCESS and RESPONSE."
-  (let ((content-type (plz-stream--response-content-type response)))
-    (or (alist-get content-type (process-get process :plz-stream-handlers) nil nil #'equal)
-        #'plz-stream-handler-default)))
+  (let ((content-type (plz-stream--response-content-type response))
+        (handlers (process-get process :plz-stream-handlers)))
+    ;; (message "HANDLERS: %s" handlers)
+    (or (alist-get content-type handlers nil nil #'equal)
+        #'plz-stream-default-handler)))
 
 (defun plz-stream--process-filter (process chunk)
   "The process filter for streaming HTTP responses.
@@ -67,7 +69,7 @@ CHUNK is a part of the HTTP body."
       (let ((moving (= (point) (process-mark process))))
         (if-let (handler (process-get process :plz-stream-handler))
             (let ((response (process-get process :plz-stream-response)))
-              (setf (oref response body) chunk)
+              (setf (plz-response-body response) chunk)
               (funcall handler process response))
           (progn
             (save-excursion
@@ -76,16 +78,19 @@ CHUNK is a part of the HTTP body."
               (set-marker (process-mark process) (point)))
             (goto-char (point-min))
             (when (re-search-forward plz-http-end-of-headers-regexp nil t)
-              (goto-char (point-min))
-              (let* ((response (plz--response))
-                     (body (plz-response-body response))
-                     (handler (plz-stream--response-handler process response)))
-                (when body
-                  (funcall handler process response))
-                (setf (oref response body) nil)
-                (process-put process :plz-stream-handler handler)
-                (process-put process :plz-stream-response response)
-                (widen)))))
+              (let ((body-start (point)))
+                (goto-char (point-min))
+                (let* ((response (plz--response))
+                       (_ (widen))
+                       (handler (plz-stream--response-handler process response)))
+                  (when-let (body (plz-response-body response))
+                    (when (> (length body) 0)
+                      (delete-region body-start (point))
+                      (set-marker (process-mark process) (point))
+                      (funcall handler process response)))
+                  (process-put process :plz-stream-handler handler)
+                  (setf (plz-response-body response) nil)
+                  (process-put process :plz-stream-response response))))))
         (when moving
           (goto-char (process-mark process)))))))
 
@@ -215,23 +220,3 @@ not.
 (provide 'plz-stream)
 
 ;;; plz-stream.el ends here
-
-(let ((api-key (auth-source-pick-first-password :host "openai.com" :user "ellama")))
-  (plz-stream 'post "https://api.openai.com/v1/chat/completions"
-    :as `(stream :handlers ,plz-stream-content-types)
-    :body (json-encode
-           '(("model" . "gpt-3.5-turbo")
-             ("messages" . [(("role" . "system")
-                             ("content" . "You are an assistant."))
-                            (("role" . "user")
-                             ("content" . "Which model are you running?"))])
-             ("stream" . t)))
-    :headers `(("Authorization" . ,(format "Bearer %s" api-key))
-               ("Content-Type" . "application/json"))
-    :else (lambda (response)
-            (message "Else!"))
-    :finally (lambda ()
-               (message "Finally!"))
-    :then (lambda (response)
-            (message "Then!")
-            (setq my-response response))))
