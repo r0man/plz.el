@@ -160,6 +160,48 @@
         (should (equal (list event-1) events))
         (should (equal "" (buffer-string)))))))
 
+(ert-deftest event-source-buffer-event-source ()
+  (with-temp-buffer
+    (let* ((event-1 (event-source-event
+                     :data "This is the first message."
+                     :origin (buffer-name)))
+           (event-2 (event-source-event
+                     :data "This is the second message, it\nhas two lines."
+                     :origin (buffer-name)))
+           (open-events) (message-events) (close-events)
+           (source (buffer-event-source
+                    :buffer (buffer-name)
+                    :handlers `(("open" . ,(lambda (source event)
+                                             (push event open-events)
+                                             (should (cl-typep source 'event-source))
+                                             (should (cl-typep event 'event-source-event))
+                                             (should (equal "open" (event-source-event-type event)))))
+                                ("message" . ,(lambda (source event)
+                                                (push event message-events)
+                                                (should (cl-typep source 'event-source))
+                                                (should (cl-typep event 'event-source-event))
+                                                (should (equal "message" (event-source-event-type event)))))
+                                ("close" . ,(lambda (source event)
+                                              (push event close-events)
+                                              (should (cl-typep source 'event-source))
+                                              (should (cl-typep event 'event-source-event))
+                                              (should (equal "close" (event-source-event-type event)))))))))
+      (with-slots (parser) source
+        (event-source-open source)
+        (should (equal (list (event-source-event :type "open")) open-events))
+        (event-source-insert source "data: This is the first message.\n")
+        (should (null message-events))
+        (event-source-insert source "\n")
+        (should (equal (list event-1) message-events))
+        (event-source-insert source "data: This is the second message, it\n")
+        (event-source-insert source "data: has two lines.\n")
+        (event-source-insert source "\n")
+        (event-source-insert source "data: This is the third message.\n")
+        (should (equal (list event-2 event-1) message-events))
+        (event-source-close source)
+        (should (equal (list (event-source-event :type "close")) close-events))
+        (should (equal "" (buffer-string)))))))
+
 (ert-deftest event-source-completions ()
   (when-let (api-key (auth-source-pick-first-password :host "openai.com" :user "ellama"))
     (let ((events)

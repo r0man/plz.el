@@ -18,6 +18,7 @@
 (require 'eieio)
 (require 'pcase)
 (require 'plz)
+(require 'plz-stream)
 (require 'rx)
 
 ;; Event
@@ -239,6 +240,20 @@
     :type (or null string)))
   "The server sent event source class.")
 
+(cl-defgeneric event-source-open (source)
+  "Open the event SOURCE.")
+
+(cl-defgeneric event-source-close (source)
+  "Close the event SOURCE.")
+
+(defun event-source-insert (source string)
+  "Insert STRING into the buffer of the event SOURCE and dispatch."
+  (with-slots (parser) source
+    (event-source-parser-insert parser string)
+    (with-slots (events) parser
+      (event-source-dispatch-events source events)
+      (setf events nil))))
+
 (defun event-source-add-listener (source type listener)
   "Add an event LISTENER for event TYPE to the event SOURCE."
   (with-slots (handlers) source
@@ -264,6 +279,7 @@
 (defun event-source-dispatch-events (source events)
   "Dispatch the EVENTS to the listeners of event SOURCE."
   (dolist (event (reverse events))
+    (message "Dispatching event %s" event)
     (event-source-dispatch-event source event)))
 
 (defun event-source--response-in-buffer-p ()
@@ -278,6 +294,38 @@
     (goto-char (point-min))
     (re-search-forward plz-http-end-of-headers-regexp nil t)
     (point)))
+
+;; Buffer event source
+
+(defclass buffer-event-source (event-source)
+  ((buffer
+    :initarg :buffer
+    :documentation "The event source buffer."
+    :type string)
+   (parser
+    :initarg :parser
+    :documentation "The event source parser."
+    :type (or null event-source-parser)))
+  "A server sent event source using curl for HTTP.")
+
+(cl-defmethod event-source-open ((source buffer-event-source))
+  "Open a connection to the URL of the event SOURCE."
+  (with-slots (buffer errors options ready-state parser) source
+    (setf ready-state 'connecting)
+    (setf parser (event-source-parser :buffer buffer))
+    (when (get-buffer buffer)
+      (event-source-dispatch-event source (event-source-event :type "open"))
+      (setf ready-state 'open))
+    source))
+
+(cl-defmethod event-source-close ((source buffer-event-source))
+  "Close the connection of the event SOURCE."
+  (with-slots (buffer ready-state) source
+    (setf ready-state 'closed)
+    (event-source-dispatch-event source (event-source-event :type "close"))
+    source))
+
+;; Plz.el event source
 
 (defclass plz-event-source (event-source)
   ((process
@@ -365,6 +413,33 @@ CHUNK is a part of the HTTP body."
   (with-slots (process ready-state) source
     (delete-process process)
     (setf ready-state 'closed)))
+
+(defun event-source-text-event-stream (handlers)
+  "The default PROCESS filter for a text/event-stream HTTP RESPONSE."
+  (lambda (process response)
+    (cond
+     ((not (process-get process :plz-event-source))
+      (let ((event-source (buffer-event-source
+                           :buffer (buffer-name (current-buffer))
+                           :handlers handlers)))
+        (process-put process :plz-event-source event-source)
+        (event-source-open event-source)
+        (event-source-insert event-source (plz-response-body response))))
+     ((process-get process :plz-event-source)
+      (plz-stream-handler-default process response)))))
+
+;; (setq plz-stream-content-types
+;;       `(("text/event-stream"
+;;          . ,(event-source-text-event-stream
+;;              `(("open" . (lambda (source event)
+;;                            (message "open: %s" event)))
+;;                ("message" . (lambda (source event)
+;;                               (message "message: %s" event)))
+;;                ("error" . (lambda (source event)
+;;                             (message "error: %s" event)))
+;;                ("close" . (lambda (source event)
+;;                             (message "close: %s" event))))))
+;;         (t . plz-stream-handler-default)))
 
 (provide 'event-source)
 ;;; event-source.el ends here

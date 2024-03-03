@@ -43,6 +43,7 @@
 (require 'map)
 
 (require 'plz)
+(require 'plz-stream)
 
 ;;;; Variables
 
@@ -731,6 +732,25 @@ and only called once."
     (seq-doseq (args through)
       (should (processp (car args)))
       (should (stringp (cadr args))))))
+
+(plz-deftest plz-openai-chat-completions ()
+  (let ((api-key (auth-source-pick-first-password :host "openai.com" :user "ellama")))
+    (plz-stream 'post "https://api.openai.com/v1/chat/completions"
+      :as 'response
+      :body (json-encode
+             '(("model" . "gpt-3.5-turbo")
+               ("messages" . [(("role" . "system")
+                               ("content" . "You are an assistant."))
+                              (("role" . "user")
+                               ("content" . "Which model are you running?"))])
+               ("stream" . t)))
+      :headers `(("Authorization" . ,(format "Bearer %s" api-key))
+                 ("Content-Type" . "application/json"))
+      :finally (lambda ()
+                 (message "Finally!"))
+      :then (lambda (response)
+              (message "Then!")
+              (setq my-response response)))))
 
 ;;;; Footer
 
