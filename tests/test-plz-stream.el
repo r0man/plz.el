@@ -13,21 +13,26 @@
 
 (require 'ert)
 (require 'plz-stream)
+(require 'test-plz)
 
-(ert-deftest plz-stream-completions ()
-  (when-let (api-key (auth-source-pick-first-password :host "openai.com" :user "ellama"))
-    (let* ((open-events) (message-events) (error-events) (close-events)
+(defvar test-plz-stream-token
+  (auth-source-pick-first-password :host "openai.com" :user "ellama"))
+
+(ert-deftest test-plz-stream-chat-completions-as-text/event-stream ()
+  (when-let (api-key test-plz-stream-token)
+    (let* ((close-events) (else) (error-events) (finally) (message-events) (open-events) (then)
            (process (plz-stream 'post "https://api.openai.com/v1/chat/completions"
                       :as `(stream :handlers (("text/event-stream"
-                                               . ,(event-source-text-event-stream
-                                                   `(("open" . ,(lambda (source event)
-                                                                  (push event open-events)))
-                                                     ("message" . ,(lambda (source event)
-                                                                     (push event message-events)))
-                                                     ("error" . ,(lambda (source event)
-                                                                   (push event error-events)))
-                                                     ("close" . ,(lambda (source event)
-                                                                   (push event close-events))))))))
+                                               . ,(plz-stream:text/event-stream
+                                                   :on `(("open" . ,(lambda (source event)
+                                                                      (push event open-events)))
+                                                         ("message" . ,(lambda (source event)
+                                                                         (push event message-events)))
+                                                         ("error" . ,(lambda (source event)
+                                                                       (push event error-events)))
+                                                         ("close" . ,(lambda (source event)
+                                                                       (push event close-events))))))
+                                              (t . ,(plz-stream:application/octet-stream))))
                       :body (json-encode
                              '(("model" . "gpt-3.5-turbo")
                                ("messages" . [(("role" . "system")
@@ -38,17 +43,15 @@
                                ("temperature" . 0.001)))
                       :headers `(("Authorization" . ,(format "Bearer %s" api-key))
                                  ("Content-Type" . "application/json"))
-                      :else (lambda (response)
-                              (message "Else!"))
-                      :finally (lambda ()
-                                 (message "Finally!"))
-                      :then (lambda (response)
-                              (message "Then!")
-                              (setq my-response response)))))
+                      :else (lambda (response) (push object else))
+                      :finally (lambda () (push t finally))
+                      :then (lambda (object) (push object then)))))
       (plz-test-wait process)
-      (should (equal (list (event-source-event :type "open")) open-events))
+      (should (null else))
+      (should (equal '(t) finally))
+      (should (equal (list (plz-event-source-event :type "open")) open-events))
       (should (null error-events))
-      ;; (should (equal (list (event-source-event :type "close")) close-events))
+      (should (equal (list (plz-event-source-event :type "close")) close-events))
       (should (equal "Hello! How can I assist you today?"
                      (thread-last
                        (reverse message-events)
@@ -64,11 +67,11 @@
                                       content))))
                        (string-join)))))))
 
-(ert-deftest test-plz-stream-application/octet-stream ()
-  (when-let (api-key (auth-source-pick-first-password :host "openai.com" :user "ellama"))
-    (let* ((open-events) (message-events) (error-events) (close-events)
+(ert-deftest test-plz-stream-chat-completions-as-application/octet-stream ()
+  (when-let (api-key test-plz-stream-token)
+    (let* ((else) (finally) (then)
            (process (plz-stream 'post "https://api.openai.com/v1/chat/completions"
-                      :as `(stream :handlers ((t . (plz-stream:application/octet-stream))))
+                      :as `(stream :handlers ((t . ,(plz-stream:application/octet-stream))))
                       :body (json-encode
                              '(("model" . "gpt-3.5-turbo")
                                ("messages" . [(("role" . "system")
@@ -79,31 +82,17 @@
                                ("temperature" . 0.001)))
                       :headers `(("Authorization" . ,(format "Bearer %s" api-key))
                                  ("Content-Type" . "application/json"))
-                      :else (lambda (response)
-                              (message "Else!"))
-                      :finally (lambda ()
-                                 (message "Finally!"))
-                      :then (lambda (response)
-                              (message "Then!")
-                              (setq my-response response)))))
+                      :else (lambda (response) (push object else))
+                      :finally (lambda () (push t finally))
+                      :then (lambda (object) (push object then)))))
       (plz-test-wait process)
-      (should (equal (list (event-source-event :type "open")) open-events))
-      (should (null error-events))
-      ;; (should (equal (list (event-source-event :type "close")) close-events))
-      (should (equal "Hello! How can I assist you today?"
-                     (thread-last
-                       (reverse message-events)
-                       (seq-filter (lambda (event)
-                                     (with-slots (data type) event
-                                       (not (equal "[DONE]" data)))))
-                       (seq-map (lambda (event)
-                                  (with-slots (data) event
-                                    (when-let ((data (json-parse-string data))
-                                               (choice (seq-first (map-elt data "choices")))
-                                               (delta (map-elt choice "delta"))
-                                               (content (map-elt delta "content")))
-                                      content))))
-                       (string-join)))))))
+      (should (null else))
+      (should (equal '(t) finally))
+      (should (equal 1 (length then)))
+      (seq-doseq (response then)
+        (should (plz-response-p response))
+        (should (equal 200 (plz-response-status response)))
+        (should (string-match "[DONE]" (plz-response-body response)))))))
 
 ;;;; Footer
 
