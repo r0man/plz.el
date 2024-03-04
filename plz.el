@@ -110,7 +110,7 @@
 ;;;; Structs
 
 (cl-defstruct plz-response
-  version status headers body)
+  version status headers body process)
 
 (cl-defstruct plz-error
   curl-error response message)
@@ -254,7 +254,7 @@ connection phase and waiting to receive the response (the
 
 ;;;;; Public
 
-(cl-defun plz (method url &rest rest &key headers body else finally noquery
+(cl-defun plz (method url &rest rest &key headers body else finally noquery process-filter
                       (as 'string) (then 'sync)
                       (body-type 'text) (decode t decode-s)
                       (connect-timeout plz-connect-timeout) (timeout plz-timeout))
@@ -404,6 +404,7 @@ NOQUERY is passed to `make-process', which see.
                                 :coding 'binary
                                 :command (append (list plz-curl-program) curl-command-line-args)
                                 :connection-type 'pipe
+                                :filter process-filter
                                 :sentinel #'plz--sentinel
                                 :stderr stderr-process
                                 :noquery noquery))
@@ -438,7 +439,7 @@ NOQUERY is passed to `make-process', which see.
                         (decode-coding-region (point) (point-max) coding-system)))
                     (funcall then (current-buffer)))))
        ('response (lambda ()
-                    (funcall then (or (plz--response :decode-p decode)
+                    (funcall then (or (plz--response :decode-p decode :process process)
                                       (make-plz-error :message (format "response is nil for buffer:%S  buffer-string:%S"
                                                                        process-buffer (buffer-string)))))))
        ('file (lambda ()
@@ -770,7 +771,7 @@ argument passed to `plz--sentinel', which see."
 
               ;; Any other status code is considered unsuccessful
               ;; (for now, anyway).
-              (let ((err (make-plz-error :response (plz--response))))
+              (let ((err (make-plz-error :response (plz--response :process process))))
                 (pcase-exhaustive (process-get process :plz-else)
                   (`nil (process-put process :plz-result err))
                   ((and (pred functionp) fn) (funcall fn err)))))))
@@ -836,10 +837,12 @@ Arguments are PROCESS and STATUS (ok, checkdoc?)."
     (or (re-search-forward "\r\n\r\n" nil t)
         (signal 'plz-http-error '("plz--response: End of redirect headers not found")))))
 
-(cl-defun plz--response (&key (decode-p t))
+(cl-defun plz--response (&key (decode-p t) process)
   "Return response structure for HTTP response in current buffer.
 When DECODE-P is non-nil, decode the response body automatically
 according to the apparent coding system.
+
+PROCESS is the curl process object that made the request.
 
 Assumes that point is at beginning of HTTP response."
   (save-excursion
@@ -859,7 +862,8 @@ Assumes that point is at beginning of HTTP response."
        :version http-version
        :status status-code
        :headers headers
-       :body (buffer-string)))))
+       :body (buffer-string)
+       :process process))))
 
 (defun plz--coding-system (&optional headers)
   "Return coding system for HTTP response in current buffer.
