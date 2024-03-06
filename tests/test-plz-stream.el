@@ -12,6 +12,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'plz-event-source)
 (require 'plz-stream)
 (require 'test-plz)
 
@@ -24,13 +25,13 @@
            (process (plz-stream 'post "https://api.openai.com/v1/chat/completions"
                       :as `(stream :handlers (("text/event-stream"
                                                . ,(plz-stream:text/event-stream
-                                                   :on `(("open" . ,(lambda (source event)
+                                                   :on `(("open" . ,(lambda (_ event)
                                                                       (push event open-events)))
-                                                         ("message" . ,(lambda (source event)
+                                                         ("message" . ,(lambda (_ event)
                                                                          (push event message-events)))
-                                                         ("error" . ,(lambda (source event)
+                                                         ("error" . ,(lambda (_ event)
                                                                        (push event error-events)))
-                                                         ("close" . ,(lambda (source event)
+                                                         ("close" . ,(lambda (_ event)
                                                                        (push event close-events))))))
                                               (t . ,(plz-stream:application/octet-stream))))
                       :body (json-encode
@@ -43,7 +44,7 @@
                                ("temperature" . 0.001)))
                       :headers `(("Authorization" . ,(format "Bearer %s" api-key))
                                  ("Content-Type" . "application/json"))
-                      :else (lambda (response) (push object else))
+                      :else (lambda (object) (push object else))
                       :finally (lambda () (push t finally))
                       :then (lambda (object) (push object then)))))
       (plz-test-wait process)
@@ -82,7 +83,7 @@
                                ("temperature" . 0.001)))
                       :headers `(("Authorization" . ,(format "Bearer %s" api-key))
                                  ("Content-Type" . "application/json"))
-                      :else (lambda (response) (push object else))
+                      :else (lambda (object) (push object else))
                       :finally (lambda () (push t finally))
                       :then (lambda (object) (push object then)))))
       (plz-test-wait process)

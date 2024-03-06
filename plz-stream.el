@@ -230,7 +230,12 @@ not.
     (setq process (plz method url
                     :as as
                     :body body
+                    :body-type body-type
+                    :connect-timeout connect-timeout
+                    :decode decode
                     :headers headers
+                    :noquery noquery
+                    :timeout timeout
                     :then (cond ((symbolp then) then)
                                 ((functionp then)
                                  (lambda (object)

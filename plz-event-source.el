@@ -444,10 +444,10 @@ CHUNK is a part of the HTTP body."
 
 (cl-defmethod plz-stream-else ((_ plz-stream:text/event-stream) error)
   (message "ERROR")
-  (plz-event-source-dispatch-event
-   (plz-stream:text/event-stream--event-source response)
-   (plz-event-source-event :type "error" :data error))
-  (plz-event-source-close event-source))
+  (let* ((response (plz-error-response error))
+         (event-source (plz-stream:text/event-stream--event-source response)))
+    (plz-event-source-dispatch-event event-source (plz-event-source-event :type "error" :data error))
+    (plz-event-source-close event-source)))
 
 (cl-defmethod plz-stream-process ((handler plz-stream:text/event-stream) process response)
   (when (buffer-live-p (process-buffer process))
@@ -457,7 +457,7 @@ CHUNK is a part of the HTTP body."
                      (plz-event-source-open
                       (plz-buffer-event-source
                        :buffer (buffer-name (current-buffer))
-                       :handlers (oref handler :on)))))
+                       :handlers (oref handler on)))))
       (plz-event-source-insert (process-get process :plz-event-source)
                                (plz-response-body response)))))
 
@@ -467,35 +467,35 @@ CHUNK is a part of the HTTP body."
 (provide 'plz-event-source)
 ;;; plz-event-source.el ends here
 
-(when-let (api-key (auth-source-pick-first-password :host "openai.com" :user "ellama"))
-  (plz-stream 'post "https://api.openai.com/v1/chat/completions"
-    :as `(stream :handlers (("text/event-stream"
-                             . ,(plz-stream:text/event-stream
-                                 :on `(("open" . ,(lambda (source event)
-                                                    (message "Open")))
-                                       ("message" . ,(lambda (source event)
-                                                       ;; (with-slots (data) event
-                                                       ;;   (message "%s" data))
-                                                       ))
-                                       ("error" . ,(lambda (source event)
-                                                     (message "Error")))
-                                       ("close" . ,(lambda (source event)
-                                                     (message "Close"))))))
-                            (t . ,(plz-stream:application/octet-stream))))
-    :body (json-encode
-           '(("model" . "gpt-3.5-turbo")
-             ("messages" . [(("role" . "system")
-                             ("content" . "You are an assistant."))
-                            (("role" . "user")
-                             ("content" . "Hello"))])
-             ("stream" . t)
-             ("temperature" . 0.001)))
-    :headers `(("Authorization" . ,(format "Bearer %s" api-key))
-               ("Content-Type" . "application/json"))
-    :else (lambda (response)
-            (message "Else!"))
-    :finally (lambda ()
-               (message "Finally!"))
-    :then (lambda (response)
-            (message "Then!")
-            (setq my-response response))))
+;; (when-let (api-key (auth-source-pick-first-password :host "openai.com" :user "ellama"))
+;;   (plz-stream 'post "https://api.openai.com/v1/chat/completions"
+;;     :as `(stream :handlers (("text/event-stream"
+;;                              . ,(plz-stream:text/event-stream
+;;                                  :on `(("open" . ,(lambda (_ event)
+;;                                                     (message "Open")))
+;;                                        ("message" . ,(lambda (source event)
+;;                                                        ;; (with-slots (data) event
+;;                                                        ;;   (message "%s" data))
+;;                                                        ))
+;;                                        ("error" . ,(lambda (_ event)
+;;                                                      (message "Error")))
+;;                                        ("close" . ,(lambda (_ event)
+;;                                                      (message "Close"))))))
+;;                             (t . ,(plz-stream:application/octet-stream))))
+;;     :body (json-encode
+;;            '(("model" . "gpt-3.5-turbo")
+;;              ("messages" . [(("role" . "system")
+;;                              ("content" . "You are an assistant."))
+;;                             (("role" . "user")
+;;                              ("content" . "Hello"))])
+;;              ("stream" . t)
+;;              ("temperature" . 0.001)))
+;;     :headers `(("Authorization" . ,(format "Bearer %s" api-key))
+;;                ("Content-Type" . "application/json"))
+;;     :else (lambda (response)
+;;             (message "Else!"))
+;;     :finally (lambda ()
+;;                (message "Finally!"))
+;;     :then (lambda (response)
+;;             (message "Then!")
+;;             (setq my-response response))))
