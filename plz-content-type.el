@@ -2,8 +2,8 @@
 
 ;; Copyright (C) 2019-2023  Free Software Foundation, Inc.
 
-;; Author: Adam Porter <adam@alphapapa.net>
-;; Maintainer: Adam Porter <adam@alphapapa.net>
+;; Author: r0man <r0man@burningswell.com>
+;; Maintainer: r0man <r0man@burningswell.com>
 
 ;; This file is part of GNU Emacs.
 
