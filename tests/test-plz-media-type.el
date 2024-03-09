@@ -1,4 +1,4 @@
-;;; test-plz-content-type.el --- Event Source Test Module -*- lexical-binding: t; -*-
+;;; test-plz-media-type.el --- Event Source Test Module -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2019-2023  Free Software Foundation, Inc.
 
@@ -30,45 +30,45 @@
 
 (require 'ert)
 (require 'plz-event-source)
-(require 'plz-content-type)
+(require 'plz-media-type)
 (require 'plz-test)
 
-(plz-deftest test-plz-content-type-json ()
+(plz-deftest test-plz-media-type-json ()
   (let* ((response)
-         (process (plz-content-type-request 'get (url "/json")
-                    :content-types plz-content-types
+         (process (plz-media-type-request 'get (url "/json")
+                    :media-types plz-media-types
                     :then (lambda (object)
                             (setf response object)))))
     (plz-test-wait process)
     (let-alist (plz-response-body response)
       (should (equal "Sample Slide Show" .slideshow.title)))))
 
-(plz-deftest test-plz-content-type-html ()
+(plz-deftest test-plz-media-type-html ()
   (let* ((response)
-         (process (plz-content-type-request 'get (url "/html")
-                    :content-types plz-content-types
+         (process (plz-media-type-request 'get (url "/html")
+                    :media-types plz-media-types
                     :then (lambda (object)
                             (setf response object)))))
     (plz-test-wait process)
     (let ((body (plz-response-body response)))
       (should (equal 'top (car body))))))
 
-(plz-deftest test-plz-content-type-xml ()
+(plz-deftest test-plz-media-type-xml ()
   (let* ((response)
-         (process (plz-content-type-request 'get (url "/xml")
-                    :content-types plz-content-types
+         (process (plz-media-type-request 'get (url "/xml")
+                    :media-types plz-media-types
                     :then (lambda (object)
                             (setf response object)))))
     (plz-test-wait process)
     (let ((body (plz-response-body response)))
       (should (equal 'top (car body))))))
 
-(ert-deftest test-plz-content-type-event-stream ()
+(ert-deftest test-plz-media-type-event-stream ()
   (when-let (api-key plz-test-openai-token)
     (let* ((close-events) (else) (error-events) (finally) (message-events) (open-events) (then)
-           (process (plz-content-type-request 'post "https://api.openai.com/v1/chat/completions"
-                      :content-types (cons (cons "text/event-stream"
-                                                 (plz-content-type:text/event-stream
+           (process (plz-media-type-request 'post "https://api.openai.com/v1/chat/completions"
+                      :media-types (cons (cons "text/event-stream"
+                                                 (plz-media-type:text/event-stream
                                                   :events `(("open" . ,(lambda (_ event)
                                                                          (push event open-events)))
                                                             ("message" . ,(lambda (_ event)
@@ -77,7 +77,7 @@
                                                                           (push event error-events)))
                                                             ("close" . ,(lambda (_ event)
                                                                           (push event close-events))))))
-                                           plz-content-types)
+                                           plz-media-types)
                       :body (json-encode
                              '(("model" . "gpt-3.5-turbo")
                                ("messages" . [(("role" . "system")
@@ -115,11 +115,11 @@
                                       content))))
                        (string-join)))))))
 
-(ert-deftest test-plz-content-type-chat-completions-as-application/octet-stream ()
+(ert-deftest test-plz-media-type-chat-completions-as-application/octet-stream ()
   (when-let (api-key plz-test-openai-token)
     (let* ((else) (finally) (then)
-           (process (plz-content-type-request 'post "https://api.openai.com/v1/chat/completions"
-                      :content-types `((t . ,(plz-content-type:application/octet-stream)))
+           (process (plz-media-type-request 'post "https://api.openai.com/v1/chat/completions"
+                      :media-types `((t . ,(plz-media-type:application/octet-stream)))
                       :body (json-encode
                              '(("model" . "gpt-3.5-turbo")
                                ("messages" . [(("role" . "system")
@@ -144,6 +144,6 @@
 
 ;;;; Footer
 
-(provide 'test-plz-content-type)
+(provide 'test-plz-media-type)
 
-;;; test-plz-content-type.el ends here
+;;; test-plz-media-type.el ends here

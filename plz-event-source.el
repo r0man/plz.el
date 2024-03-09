@@ -35,7 +35,7 @@
 (require 'eieio)
 (require 'pcase)
 (require 'plz)
-(require 'plz-content-type)
+(require 'plz-media-type)
 (require 'rx)
 
 ;; Event
@@ -439,15 +439,15 @@ CHUNK is a part of the HTTP body."
 
 ;; Content Type: text/event-stream
 
-(defclass plz-content-type:text/event-stream (plz-content-type:application/octet-stream)
-  ((mime-type :initform "text/event-stream")
+(defclass plz-media-type:text/event-stream (plz-media-type:application/octet-stream)
+  ((name :initform "text/event-stream")
    (events :documentation "Association list from event type to handler."
            :initarg :events)))
 
 (defvar-local plz-event-source--current nil
   "The event source object of the current process buffer.")
 
-(defun plz-content-type:text/event-stream--event-source ()
+(defun plz-media-type:text/event-stream--event-source ()
   "Return the event source of the current buffer."
   (if (cl-typep plz-event-source--current 'plz-event-source)
       plz-event-source--current
@@ -456,15 +456,15 @@ CHUNK is a part of the HTTP body."
                          :event-source plz-event-source--current
                          :var 'plz-event-source--current))))
 
-(cl-defmethod plz-content-type-else ((_ plz-content-type:text/event-stream) error)
-  "Transform the ERROR into a format suitable for CONTENT-TYPE."
-  (let ((event-source (plz-content-type:text/event-stream--event-source)))
+(cl-defmethod plz-media-type-else ((_ plz-media-type:text/event-stream) error)
+  "Transform the ERROR into a format suitable for MEDIA-TYPE."
+  (let ((event-source (plz-media-type:text/event-stream--event-source)))
     (plz-event-source-dispatch-event event-source (plz-event-source-event :type "error" :data error))
     (plz-event-source-close event-source)
     error))
 
-(cl-defmethod plz-content-type-process ((content-type plz-content-type:text/event-stream) process chunk)
-  "Process the CHUNK according to CONTENT-TYPE using PROCESS."
+(cl-defmethod plz-media-type-process ((media-type plz-media-type:text/event-stream) process chunk)
+  "Process the CHUNK according to MEDIA-TYPE using PROCESS."
   (when (buffer-live-p (process-buffer process))
     (with-current-buffer (process-buffer process)
       (unless plz-event-source--current
@@ -472,50 +472,13 @@ CHUNK is a part of the HTTP body."
               (plz-event-source-open
                (plz-buffer-event-source
                 :buffer (buffer-name (current-buffer))
-                :handlers (oref content-type events)))))
+                :handlers (oref media-type events)))))
       (plz-event-source-insert plz-event-source--current (plz-response-body chunk)))))
 
-(cl-defmethod plz-content-type-then ((_ plz-content-type:text/event-stream) response)
-  "Transform the RESPONSE into a format suitable for CONTENT-TYPE."
-  (plz-event-source-close (plz-content-type:text/event-stream--event-source))
+(cl-defmethod plz-media-type-then ((_ plz-media-type:text/event-stream) response)
+  "Transform the RESPONSE into a format suitable for MEDIA-TYPE."
+  (plz-event-source-close (plz-media-type:text/event-stream--event-source))
   response)
-
-;; ;; Content Type: text/event-stream
-
-;; (defclass plz-content-type:text/event-stream (plz-content-type:application/octet-stream)
-;;   ((mime-type :initform "text/event-stream")
-;;    (events :documentation "Association list from event type to handler."
-;;            :initarg :events)))
-
-;; (defun plz-content-type:text/event-stream--event-source (response)
-;;   "Return the event source of the RESPONSE."
-;;   (process-get (plz-response-process response) :plz-event-source))
-
-;; (cl-defmethod plz-content-type-else ((_ plz-content-type:text/event-stream) error)
-;;   "Transform the ERROR into a format suitable for CONTENT-TYPE."
-;;   (let* ((response (plz-error-response error))
-;;          (event-source (plz-content-type:text/event-stream--event-source response)))
-;;     (plz-event-source-dispatch-event event-source (plz-event-source-event :type "error" :data error))
-;;     (plz-event-source-close event-source)
-;;     error))
-
-;; (cl-defmethod plz-content-type-process ((content-type plz-content-type:text/event-stream) process chunk)
-;;   "Process the CHUNK according to CONTENT-TYPE using PROCESS."
-;;   (when (buffer-live-p (process-buffer process))
-;;     (with-current-buffer (process-buffer process)
-;;       (unless (process-get process :plz-event-source)
-;;         (process-put process :plz-event-source
-;;                      (plz-event-source-open
-;;                       (plz-buffer-event-source
-;;                        :buffer (buffer-name (current-buffer))
-;;                        :handlers (oref content-type events)))))
-;;       (plz-event-source-insert (process-get process :plz-event-source)
-;;                                (plz-response-body chunk)))))
-
-;; (cl-defmethod plz-content-type-then ((_ plz-content-type:text/event-stream) response)
-;;   "Transform the RESPONSE into a format suitable for CONTENT-TYPE."
-;;   (plz-event-source-close (plz-content-type:text/event-stream--event-source response))
-;;   response)
 
 (provide 'plz-event-source)
 ;;; plz-event-source.el ends here
