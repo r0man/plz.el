@@ -35,7 +35,7 @@
 (require 'eieio)
 (require 'pcase)
 (require 'plz)
-(require 'plz-stream)
+(require 'plz-content-type)
 (require 'rx)
 
 ;; Event

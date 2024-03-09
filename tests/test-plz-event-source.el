@@ -103,7 +103,7 @@
         (should (equal (list event-1) events))
         (should (equal "" (buffer-string)))))))
 
-(ert-deftest test-plz-plz-event-source-parse-four-blocks ()
+(ert-deftest test-plz-event-source-parse-four-blocks ()
   (with-temp-buffer
     (let ((event-1 (plz-event-source-event
                     :data "first event"
@@ -139,7 +139,7 @@
         (should (equal (list event-3 event-2 event-1) events))
         (should (equal "" (buffer-string)))))))
 
-(ert-deftest test-plz-plz-event-source-parse-two-events ()
+(ert-deftest test-plz-event-source-parse-two-events ()
   (with-temp-buffer
     (let ((event-1 (plz-event-source-event
                     :data ""
