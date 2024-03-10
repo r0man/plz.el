@@ -403,7 +403,9 @@
 (defclass plz-media-type:text/event-stream (plz-media-type:application/octet-stream)
   ((name :initform "text/event-stream")
    (events :documentation "Association list from event type to handler."
-           :initarg :events)))
+           :initarg :events
+           :initform nil
+           :type list)))
 
 (defun plz-media-type:text/event-stream--event-source (response)
   "Return the event source of the RESPONSE."
