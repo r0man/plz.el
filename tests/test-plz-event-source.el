@@ -315,6 +315,63 @@
                                         content))))
                          (string-join))))))))
 
+(ert-deftest test-plz-event-source-media-type-sync:text/event-stream ()
+  (when-let (api-key plz-test-openai-token)
+    (let* ((close-events) (error-events) (message-events) (open-events)
+           (response (plz-media-type-request 'post "https://api.openai.com/v1/chat/completions"
+                       :as `(media-types
+                             ((t . ,(plz-media-type:text/event-stream
+                                     :events `(("open" . ,(lambda (_ event)
+                                                            (push event open-events)))
+                                               ("message" . ,(lambda (_ event)
+                                                               (push event message-events)))
+                                               ("error" . ,(lambda (_ event)
+                                                             (push event error-events)))
+                                               ("close" . ,(lambda (_ event)
+                                                             (push event close-events))))))))
+                       :body (json-encode
+                              '(("model" . "gpt-3.5-turbo")
+                                ("messages" . [(("role" . "system")
+                                                ("content" . "You are an assistant."))
+                                               (("role" . "user")
+                                                ("content" . "Hello"))])
+                                ("stream" . t)
+                                ("temperature" . 0.001)))
+                       :headers `(("Authorization" . ,(format "Bearer %s" api-key))
+                                  ("Content-Type" . "application/json")))))
+      (should (plz-response-p response))
+      (should (equal 200 (plz-response-status response)))
+      (should (string-match "" (plz-response-body response)))
+      (should (equal 1 (length open-events)))
+      (seq-doseq (event open-events)
+        (with-slots (data type) event
+          (should (equal "open" type))
+          (should (plz-response-p data))
+          (should (equal 200 (plz-response-status data)))
+          (should (null (plz-response-body data)))))
+      (should (equal 0 (length error-events)))
+      (should (equal 1 (length close-events)))
+      (seq-doseq (event close-events)
+        (with-slots (data type) event
+          (should (equal "close" type))
+          (should (plz-response-p data))
+          (should (equal 200 (plz-response-status data)))
+          (should (null (plz-response-body data)))))
+      (should (equal "Hello! How can I assist you today?"
+                     (thread-last
+                       (reverse message-events)
+                       (seq-filter (lambda (event)
+                                     (with-slots (data type) event
+                                       (not (equal "[DONE]" data)))))
+                       (seq-map (lambda (event)
+                                  (with-slots (data) event
+                                    (when-let ((data (json-parse-string data))
+                                               (choice (seq-first (map-elt data "choices")))
+                                               (delta (map-elt choice "delta"))
+                                               (content (map-elt delta "content")))
+                                      content))))
+                       (string-join)))))))
+
 ;;;; footer
 
 (provide 'test-plz-event-source)
