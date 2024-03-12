@@ -93,6 +93,41 @@ in URL-encoded form)."
                                              (concat plz-test-uri-prefix part)))
                                  ,@docstring-keys-and-body)))))))
 
+(defun plz-test-make-mock-program (response-file &optional mock-file)
+  "Make a shell script that emit a curl response.
+
+RESPONSE-FILE is the file to read the response from.
+
+MOCK-FILE is the file to write the mock program to.  If nil, a
+temporary filename is used."
+  (let ((mock-file (or mock-file (make-temp-file "plz-test-mock"))))
+    (with-temp-buffer
+      (insert "#!/usr/bin/env bash")
+      (newline)
+      (insert "cat " (expand-file-name response-file) " | pv --quiet --rate-limit 1000")
+      (newline)
+      (make-directory (file-name-directory mock-file) t)
+      (write-region (point-min) (point-max) mock-file)
+      (chmod mock-file #o755)
+      mock-file)))
+
+(defun plz-test-save-mock-response (buffer filename)
+  "Write the plz HTTP response in BUFFER to FILENAME."
+  (with-current-buffer buffer
+    (widen)
+    (make-directory (file-name-directory filename) t)
+    (write-region (point-min) (point-max) filename)))
+
+(defmacro plz-test-with-mock-response (filename &rest body)
+  "Evaluate BODY with a mocked HTTP response from FILENAME."
+  (declare (indent 1) (debug (body)))
+  `(let ((plz-curl-program (plz-test-make-mock-program ,filename)))
+     ,@body))
+
+(defun plz-test-response (example)
+  "Return the HTTP test response filename for EXAMPLE."
+  (concat (locate-dominating-file "." "plz.el" ) "tests/response/" example))
+
 ;;;; Footer
 
 (provide 'plz-test)

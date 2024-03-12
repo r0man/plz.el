@@ -172,6 +172,42 @@
         (should (equal 200 (plz-response-status response)))
         (should (string-match "[DONE]" (plz-response-body response)))))))
 
+(ert-deftest test-plz-media-type-application/x-ndjson ()
+  (plz-test-with-mock-response (plz-test-response "application/x-ndjson/ollama-hello.txt")
+    (let* ((else) (finally) (then) (objects)
+           (process (plz-media-type-request  'get "http://localhost:11434/api/generate"
+                      :as `(media-types (("application/x-ndjson"
+                                          . ,(plz-media-type:application/x-ndjson
+                                              :handler (lambda (object)
+                                                         (push object objects))))))
+                      :body (json-encode
+                             (json-encode
+                              `((model . "llama2")
+                                (prompt . "Hello"))))
+                      :headers `(("Content-Type" . "application/json"))
+                      :else (lambda (object) (push object else))
+                      :finally (lambda () (push t finally))
+                      :then (lambda (object) (push object then)))))
+      (plz-test-wait process)
+      (should (null else))
+      (should (equal '(t) finally))
+      (should (equal 1 (length then)))
+      (seq-doseq (response then)
+        (should (plz-response-p response))
+        (should (equal 200 (plz-response-status response)))
+        (should (string-match "" (plz-response-body response))))
+      (should (equal 27 (length objects)))
+      (should (equal '((model . "llama2")
+                       (created_at . "2024-03-12T12:05:13.747334659Z")
+                       (response . "Hello")
+                       (done . :json-false))
+                     (seq-elt objects 26)))
+      (should (equal '((model . "llama2")
+                       (created_at . "2024-03-12T12:05:15.467785437Z")
+                       (response . "?")
+                       (done . :json-false))
+                     (seq-elt objects 1))))))
+
 ;;;; Footer
 
 (provide 'test-plz-media-type)
