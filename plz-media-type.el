@@ -219,17 +219,8 @@ CHUNK is a part of the HTTP body."
 
 ;; Content Type: text/html
 
-(defclass plz-media-type:text/html (plz-media-type:application/octet-stream)
+(defclass plz-media-type:text/html (plz-media-type:application/xml)
   ((name :initform "text/html")))
-
-(cl-defmethod plz-media-type-then ((media-type plz-media-type:text/html) response)
-  "Transform the RESPONSE into a format suitable for MEDIA-TYPE."
-  (with-slots (array-type false-object null-object object-type) media-type
-    (setf (plz-response-body response)
-          (with-temp-buffer
-            (insert (plz-response-body response))
-            (libxml-parse-html-region)))
-    response))
 
 (defvar plz-media-types
   `(("application/json" . ,(plz-media-type:application/json))
