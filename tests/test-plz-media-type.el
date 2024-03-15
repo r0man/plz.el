@@ -208,6 +208,64 @@
                        (done . :json-false))
                      (seq-elt objects 1))))))
 
+(ert-deftest test-plz-media-type-application/json-array ()
+  (plz-test-with-mock-response (plz-test-response "application/json/vertex-hello.txt")
+    (let* ((api-key "MY-API-KEY") (project "MY-PROJECT")
+           (else) (finally) (then) (objects)
+           (process (plz-media-type-request
+                      'get (format
+                            (concat "https://us-central1-aiplatform.googleapis.com"
+                                    "/v1/projects/%s/locations"
+                                    "/us-central1/publishers/google/models"
+                                    "/gemini-1.0-pro:streamGenerateContent")
+                            project)
+                      :as `(media-types (("application/json"
+                                          . ,(plz-media-type:application/json-array
+                                              :handler (lambda (object)
+                                                         (push object objects))))))
+                      :body (json-encode
+                             `((contents
+                                . [((role . "user")
+                                    (parts .
+                                           [((text . "Hello"))]))])
+                               (generation_config
+                                (maxOutputTokens . 2048)
+                                (temperature . 1)
+                                (topP . 0.4))
+                               (safetySettings
+                                . [((category . "HARM_CATEGORY_HATE_SPEECH")
+                                    (threshold . "BLOCK_MEDIUM_AND_ABOVE"))
+                                   ((category . "HARM_CATEGORY_DANGEROUS_CONTENT")
+                                    (threshold . "BLOCK_MEDIUM_AND_ABOVE"))
+                                   ((category . "HARM_CATEGORY_SEXUALLY_EXPLICIT")
+                                    (threshold . "BLOCK_MEDIUM_AND_ABOVE"))
+                                   ((category . "HARM_CATEGORY_HARASSMENT")
+                                    (threshold . "BLOCK_MEDIUM_AND_ABOVE"))])))
+                      :headers `(("Authorization" . ,(format "Bearer %s" api-key))
+                                 ("Content-Type" . "application/json"))
+                      :else (lambda (object) (push object else))
+                      :finally (lambda () (push t finally))
+                      :then (lambda (object) (push object then)))))
+      (plz-test-wait process)
+      (should (null else))
+      (should (equal '(t) finally))
+      (should (equal 1 (length then)))
+      (seq-doseq (response then)
+        (should (plz-response-p response))
+        (should (equal 200 (plz-response-status response)))
+        (should (string-match "" (plz-response-body response))))
+      (should (equal 2 (length objects)))
+      (should (equal '("Hi there!" " How can I assist you today?")
+                     (thread-last
+                       objects
+                       (seq-map (lambda (object)
+                                  (seq-mapcat (lambda (candidate)
+                                                (alist-get 'parts (cdar candidate)))
+                                              (alist-get 'candidates object))))
+                       (seq-map (lambda (part)
+                                  (alist-get 'text (car part))))
+                       (reverse)))))))
+
 ;;;; Footer
 
 (provide 'test-plz-media-type)

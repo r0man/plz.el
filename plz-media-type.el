@@ -34,9 +34,9 @@
 (require 'eieio)
 (require 'plz)
 
-(defclass plz:media-type ()
+(defclass plz-media-type ()
   ((name
-    :documentation "The MIME Type of the handler."
+    :documentation "The name of the media type."
     :initarg :name
     :initform "application/octet-stream"
     :type string)))
@@ -107,7 +107,7 @@ CHUNK is a part of the HTTP body."
 
 ;; Content Type: application/octet-stream
 
-(defclass plz-media-type:application/octet-stream (plz:media-type)
+(defclass plz-media-type:application/octet-stream (plz-media-type)
   ((name :initform "application/octet-stream")))
 
 (cl-defmethod plz-media-type-else ((media-type plz-media-type:application/octet-stream) error)
@@ -175,12 +175,71 @@ be `hash-table', `alist' (the default) or `plist'."
                                :object-type object-type)))
     response))
 
+;; Content Type: application/json (array of objects)
+
+(defclass plz-media-type:application/json-array (plz-media-type:application/json)
+  ((handler
+    :documentation "A function that will be called for each object in the JSON array."
+    :initarg :handler
+    :type (or function symbol))))
+
+(defun plz-media-type:application/json-array--parse-next (media-type)
+  "Parse a single line of the newline delimited JSON MEDIA-TYPE."
+  (cond ((looking-at "\\[")
+         (delete-char 1))
+        ((looking-at "[ ,\n\r]")
+         (delete-char 1))
+        ((looking-at "\\]")
+         (delete-char 1))
+        ((not (eobp))
+         (with-slots (array-type false-object null-object object-type) media-type
+           (ignore-errors
+             (let ((begin (point)))
+               (prog1 (json-parse-buffer
+                       :array-type array-type
+                       :false-object false-object
+                       :null-object null-object
+                       :object-type object-type)
+                 (delete-region begin (point)))))))))
+
+(defun plz-media-type:application/json-array--parse-stream (media-type process)
+  "Parse all lines of the newline delimited JSON MEDIA-TYPE in the PROCESS buffer."
+  (with-current-buffer (process-buffer process)
+    (with-slots (handler) media-type
+      (goto-char (process-get process :plz-media-type:application/json-array-position))
+      (let ((object (plz-media-type:application/json-array--parse-next media-type)))
+        (process-put process :plz-media-type:application/json-array-position (point))
+        (while object
+          (process-put process :plz-media-type:application/json-array-position (point))
+          (when (functionp handler)
+            (funcall handler object))
+          (setq object (plz-media-type:application/json-array--parse-next media-type)))))))
+
+(cl-defmethod plz-media-type-process ((media-type plz-media-type:application/json-array) process chunk)
+  "Process the CHUNK according to MEDIA-TYPE using PROCESS."
+  (ignore media-type)
+  (when (buffer-live-p (process-buffer process))
+    (with-current-buffer (process-buffer process)
+      (unless (process-get process :plz-media-type:application/json-array-position)
+        (process-put process :plz-media-type:application/json-array-position (point)))
+      (cl-call-next-method media-type process chunk)
+      (plz-media-type:application/json-array--parse-stream media-type process))))
+
+(cl-defmethod plz-media-type-then ((media-type plz-media-type:application/json-array) response)
+  "Transform the RESPONSE into a format suitable for MEDIA-TYPE."
+  (ignore media-type)
+  (plz-media-type:application/json-array--parse-stream media-type (plz-response-process response))
+  response)
+
 ;; Content Type: application/x-ndjson
 
 (defclass plz-media-type:application/x-ndjson (plz-media-type:application/json)
   ((name :initform "application/x-ndjson")
-   (handler :documentation "The handler that will be called for each JSON object in the response."
-            :initarg :handler)))
+   (handler
+    :documentation "A function that will be called for each line that contains a JSON object."
+    :initarg :handler
+    :initform nil
+    :type (or function null symbol))))
 
 (defconst plz-media-type:application/x-ndjson--line-regexp
   (rx (* not-newline) (or "\r\n" "\n" "\r"))
@@ -243,7 +302,7 @@ be `hash-table', `alist' (the default) or `plist'."
 
 (defvar plz-media-types
   `(("application/json" . ,(plz-media-type:application/json))
-    ("application/octet-stream" . ,(plz-media-type:application/json))
+    ("application/octet-stream" . ,(plz-media-type:application/octet-stream))
     ("application/xml" . ,(plz-media-type:application/xml))
     ("text/html" . ,(plz-media-type:text/html))
     (t . ,(plz-media-type:application/octet-stream)))
