@@ -447,10 +447,10 @@
           (setq-local plz-event-source--current source)))
       (plz-event-source-insert plz-event-source--current (plz-response-body chunk)))))
 
-(cl-defmethod plz-media-type-then ((_ plz-media-type:text/event-stream) response)
+(cl-defmethod plz-media-type-then ((media-type plz-media-type:text/event-stream) response)
   "Transform the RESPONSE into a format suitable for MEDIA-TYPE."
   (plz-event-source-close plz-event-source--current)
-  response)
+  (cl-call-next-method media-type response))
 
 (provide 'plz-event-source)
 ;;; plz-event-source.el ends here
