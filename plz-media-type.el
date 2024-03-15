@@ -134,15 +134,10 @@ CHUNK is a part of the HTTP body."
 (cl-defmethod plz-media-type-process ((media-type plz-media-type:application/octet-stream) process chunk)
   "Process the CHUNK according to MEDIA-TYPE using PROCESS."
   (ignore media-type)
-  (when (buffer-live-p (process-buffer process))
-    (with-current-buffer (process-buffer process)
-      (let ((moving (= (point) (process-mark process))))
-        (save-excursion
-          (goto-char (process-mark process))
-          (insert (plz-response-body chunk))
-          (set-marker (process-mark process) (point)))
-        (when moving
-          (goto-char (process-mark process)))))))
+  (save-excursion
+    (goto-char (process-mark process))
+    (insert (plz-response-body chunk))
+    (set-marker (process-mark process) (point))))
 
 ;; Content Type: application/json
 
@@ -224,12 +219,10 @@ be `hash-table', `alist' (the default) or `plist'."
 (cl-defmethod plz-media-type-process ((media-type plz-media-type:application/json-array) process chunk)
   "Process the CHUNK according to MEDIA-TYPE using PROCESS."
   (ignore media-type)
-  (when (buffer-live-p (process-buffer process))
-    (with-current-buffer (process-buffer process)
-      (unless plz-media-type--position
-        (setq-local plz-media-type--position (point)))
-      (cl-call-next-method media-type process chunk)
-      (plz-media-type:application/json-array--parse-stream media-type))))
+  (unless plz-media-type--position
+    (setq-local plz-media-type--position (point)))
+  (cl-call-next-method media-type process chunk)
+  (plz-media-type:application/json-array--parse-stream media-type))
 
 (cl-defmethod plz-media-type-then ((media-type plz-media-type:application/json-array) response)
   "Transform the RESPONSE into a format suitable for MEDIA-TYPE."
@@ -275,12 +268,10 @@ be `hash-table', `alist' (the default) or `plist'."
 
 (cl-defmethod plz-media-type-process ((media-type plz-media-type:application/x-ndjson) process chunk)
   "Process the CHUNK according to MEDIA-TYPE using PROCESS."
-  (when (buffer-live-p (process-buffer process))
-    (with-current-buffer (process-buffer process)
-      (unless plz-media-type--position
-        (setq-local plz-media-type--position (point)))
-      (cl-call-next-method media-type process chunk)
-      (plz-media-type:application/x-ndjson--parse-stream media-type))))
+  (unless plz-media-type--position
+    (setq-local plz-media-type--position (point)))
+  (cl-call-next-method media-type process chunk)
+  (plz-media-type:application/x-ndjson--parse-stream media-type))
 
 (cl-defmethod plz-media-type-then ((media-type plz-media-type:application/x-ndjson) response)
   "Transform the RESPONSE into a format suitable for MEDIA-TYPE."
