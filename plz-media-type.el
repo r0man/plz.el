@@ -405,38 +405,42 @@ not.
   (if-let (media-types (pcase as
                          (`(media-types ,media-types)
                           media-types)))
-      (let* ((plz-curl-default-args (cons "--no-buffer" plz-curl-default-args))
-             (result (plz method url
-                       :as 'buffer
-                       :body body
-                       :body-type body-type
-                       :connect-timeout connect-timeout
-                       :decode decode
-                       :else (when (functionp else)
-                               (lambda (error)
-                                 (funcall else (plz-media-type-else
-                                                plz-media-type--current
-                                                error))))
-                       :finally (when (functionp finally)
-                                  (lambda () (funcall finally)))
-                       :headers headers
-                       :noquery noquery
-                       :process-filter (lambda (process chunk)
-                                         (plz-media-type-process-filter process media-types chunk))
-                       :timeout timeout
-                       :then (cond
-                              ((symbolp then) then)
-                              ((functionp then)
-                               (lambda (_)
-                                 (funcall then (plz-media-type-then
-                                                plz-media-type--current
-                                                plz-media-type--response))))))))
-        (cond ((bufferp result)
-               (with-current-buffer result
-                 (plz-media-type-then plz-media-type--current plz-media-type--response)))
-              ((processp result)
-               result)
-              (t (user-error "Unexpected response: %s" result))))
+      (condition-case error
+          (let* ((plz-curl-default-args (cons "--no-buffer" plz-curl-default-args))
+                 (result (plz method url
+                           :as 'buffer
+                           :body body
+                           :body-type body-type
+                           :connect-timeout connect-timeout
+                           :decode decode
+                           :else (when (functionp else)
+                                   (lambda (error)
+                                     (funcall else (plz-media-type-else
+                                                    plz-media-type--current
+                                                    error))))
+                           :finally (when (functionp finally)
+                                      (lambda () (funcall finally)))
+                           :headers headers
+                           :noquery noquery
+                           :process-filter (lambda (process chunk)
+                                             (plz-media-type-process-filter process media-types chunk))
+                           :timeout timeout
+                           :then (cond
+                                  ((symbolp then) then)
+                                  ((functionp then)
+                                   (lambda (_)
+                                     (funcall then (plz-media-type-then
+                                                    plz-media-type--current
+                                                    plz-media-type--response))))))))
+            (cond ((bufferp result)
+                   (with-current-buffer result
+                     (plz-media-type-then plz-media-type--current plz-media-type--response)))
+                  ((processp result)
+                   result)
+                  (t (user-error "Unexpected response: %s" result))))
+        (plz-http-error
+         (message "ERROR: %s" error)
+         (signal (car error) (cdr error))))
     (apply #'plz (append (list method url) rest))))
 
 ;;;; Footer

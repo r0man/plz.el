@@ -126,7 +126,12 @@ temporary filename is used."
 
 (defun plz-test-response (example)
   "Return the HTTP test response filename for EXAMPLE."
-  (concat (locate-dominating-file "." "plz.el" ) "tests/response/" example))
+  (if-let (file (locate-dominating-file "." "plz.el" ))
+      (let ((filename (expand-file-name (concat file "tests/response/" example))))
+        (if (file-exists-p filename)
+            filename
+          (error "No such HTTP response file: %s" filename)))
+    (error "Can't locate dominating plz.el file")))
 
 ;;;; Footer
 
