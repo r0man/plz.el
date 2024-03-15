@@ -444,12 +444,3 @@ not.
 (provide 'plz-media-type)
 
 ;;; plz-media-type.el ends here
-
-;; (plz-media-type-request 'get "http://localhost/json"
-;;   :as `(media-types ,plz-media-types))
-
-;; (plz-media-type-request
-;;   'get "https://httpbin.org/xml"
-;;   :as `(media-types ,plz-media-types)
-;;   :then (lambda (response)
-;;           (message "THEN: %s" response)))
