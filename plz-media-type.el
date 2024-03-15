@@ -207,6 +207,8 @@ be `hash-table', `alist' (the default) or `plist'."
 (defun plz-media-type:application/json-array--parse-stream (media-type)
   "Parse all lines of the newline delimited JSON MEDIA-TYPE in the PROCESS buffer."
   (with-slots (handler) media-type
+    (unless plz-media-type--position
+      (setq-local plz-media-type--position (point)))
     (goto-char plz-media-type--position)
     (let ((object (plz-media-type:application/json-array--parse-next media-type)))
       (setq-local plz-media-type--position (point))
@@ -219,8 +221,6 @@ be `hash-table', `alist' (the default) or `plist'."
 (cl-defmethod plz-media-type-process ((media-type plz-media-type:application/json-array) process chunk)
   "Process the CHUNK according to MEDIA-TYPE using PROCESS."
   (ignore media-type)
-  (unless plz-media-type--position
-    (setq-local plz-media-type--position (point)))
   (cl-call-next-method media-type process chunk)
   (plz-media-type:application/json-array--parse-stream media-type))
 
@@ -258,6 +258,8 @@ be `hash-table', `alist' (the default) or `plist'."
 (defun plz-media-type:application/x-ndjson--parse-stream (media-type)
   "Parse all lines of the newline delimited JSON MEDIA-TYPE in the PROCESS buffer."
   (with-slots (handler) media-type
+    (unless plz-media-type--position
+      (setq-local plz-media-type--position (point)))
     (goto-char plz-media-type--position)
     (when-let (object (plz-media-type:application/x-ndjson--parse-line media-type))
       (while object
@@ -268,8 +270,6 @@ be `hash-table', `alist' (the default) or `plist'."
 
 (cl-defmethod plz-media-type-process ((media-type plz-media-type:application/x-ndjson) process chunk)
   "Process the CHUNK according to MEDIA-TYPE using PROCESS."
-  (unless plz-media-type--position
-    (setq-local plz-media-type--position (point)))
   (cl-call-next-method media-type process chunk)
   (plz-media-type:application/x-ndjson--parse-stream media-type))
 
@@ -301,6 +301,20 @@ be `hash-table', `alist' (the default) or `plist'."
     ("text/html" . ,(plz-media-type:text/html))
     (t . ,(plz-media-type:application/octet-stream)))
   "Alist from media type to content type.")
+
+(defun plz-media-type--handle-sync-error (media-types error)
+  "Handle the synchronous ERROR of type `plz-http-error' with MEDIA-TYPES."
+  (let* ((msg (cadr error))
+         (plzerror (caddr error)))
+    (signal (car error)
+            (let ((response (plz-error-response plzerror)))
+              (if-let (media-type (plz-media-type--of-response media-types response))
+                  (list msg (with-temp-buffer
+                              (when-let (body (plz-response-body response))
+                                (insert body)
+                                (goto-char (point-min)))
+                              (plz-media-type-else media-type plzerror)))
+                (cdr error))))))
 
 (cl-defun plz-media-type-request
     (method
@@ -438,9 +452,7 @@ not.
                   ((processp result)
                    result)
                   (t (user-error "Unexpected response: %s" result))))
-        (plz-http-error
-         ;; TODO: Transform body
-         (signal (car error) (cdr error))))
+        (plz-error (plz-media-type--handle-sync-error media-types error)))
     (apply #'plz (append (list method url) rest))))
 
 ;;;; Footer

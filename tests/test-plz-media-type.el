@@ -209,6 +209,21 @@
                        (done . :json-false))
                      (seq-elt objects 1))))))
 
+(ert-deftest test-plz-media-type-application/json-sync-error ()
+  (plz-test-with-mock-response (plz-test-response "application/json/vertext-unauthenticated.txt")
+    (let* ((result (condition-case error
+                       (plz-media-type-request 'get "MOCK-URL"
+                         :as `(media-types (("application/json" . ,(plz-media-type:application/json)))))
+                     (plz-error error))))
+      (should (equal 'plz-http-error (car result)))
+      (should (equal "HTTP error" (cadr result)))
+      (let ((error (caddr result)))
+        (should (plz-error-p error))
+        (let ((response (plz-error-response error)))
+          (should (plz-response-p response))
+          (should (equal 401 (plz-response-status response)))
+          (should (equal '(code . 401) (cadar (elt (plz-response-body response) 0)))))))))
+
 (ert-deftest test-plz-media-type-application/json-array-async ()
   (plz-test-with-mock-response (plz-test-response "application/json/vertex-hello.txt")
     (let* ((else) (finally) (then) (objects)
