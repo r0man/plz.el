@@ -245,13 +245,8 @@ be `hash-table', `alist' (the default) or `plist'."
 (defun plz-media-type:application/x-ndjson--parse-line (media-type)
   "Parse a single line of the newline delimited JSON MEDIA-TYPE."
   (when (looking-at plz-media-type:application/x-ndjson--line-regexp)
-    (when-let (line (delete-and-extract-region (match-beginning 0) (match-end 0)))
-      (with-slots (array-type false-object null-object object-type) media-type
-        (json-parse-string line
-                           :array-type array-type
-                           :false-object false-object
-                           :null-object null-object
-                           :object-type object-type)))))
+    (prog1 (plz-media-type--parse-json-object media-type)
+      (delete-region (match-beginning 0) (match-end 0)))))
 
 (defun plz-media-type:application/x-ndjson--parse-stream (media-type)
   "Parse all lines of the newline delimited JSON MEDIA-TYPE in the PROCESS buffer."
