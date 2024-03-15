@@ -167,15 +167,18 @@ be `hash-table', `alist' (the default) or `plist'."
     :initform 'alist
     :type symbol)))
 
+(defun plz-media-type--parse-json-object (media-type)
+  "Parse the JSON object in the current buffer according to MEDIA-TYPE."
+  (with-slots (array-type false-object null-object object-type) media-type
+    (json-parse-buffer :array-type array-type
+                       :false-object false-object
+                       :null-object null-object
+                       :object-type object-type)) )
+
 (cl-defmethod plz-media-type-then ((media-type plz-media-type:application/json) response)
   "Transform the RESPONSE into a format suitable for MEDIA-TYPE."
-  (with-slots (array-type false-object null-object object-type) media-type
-    (setf (plz-response-body response)
-          (json-parse-buffer :array-type array-type
-                             :false-object false-object
-                             :null-object null-object
-                             :object-type object-type))
-    response))
+  (setf (plz-response-body response) (plz-media-type--parse-json-object media-type))
+  response)
 
 ;; Content Type: application/json (array of objects)
 
@@ -194,15 +197,10 @@ be `hash-table', `alist' (the default) or `plist'."
         ((looking-at "\\]")
          (delete-char 1))
         ((not (eobp))
-         (with-slots (array-type false-object null-object object-type) media-type
-           (ignore-errors
-             (let ((begin (point)))
-               (prog1 (json-parse-buffer
-                       :array-type array-type
-                       :false-object false-object
-                       :null-object null-object
-                       :object-type object-type)
-                 (delete-region begin (point)))))))))
+         (ignore-errors
+           (let ((begin (point)))
+             (prog1 (plz-media-type--parse-json-object media-type)
+               (delete-region begin (point))))))))
 
 (defun plz-media-type:application/json-array--parse-stream (media-type)
   "Parse all lines of the newline delimited JSON MEDIA-TYPE in the PROCESS buffer."
