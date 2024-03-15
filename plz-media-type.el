@@ -137,11 +137,30 @@ CHUNK is a part of the HTTP body."
 ;; Content Type: application/json
 
 (defclass plz-media-type:application/json (plz-media-type:application/octet-stream)
-  ((name :initform "application/json")
-   (array-type :initform 'array)
-   (false-object :initform :json-false)
-   (null-object :initform nil)
-   (object-type :initform 'alist)))
+  ((name
+    :initform "application/json")
+   (array-type
+    :documentation "Specifies which Lisp type is used to represent arrays.  It can be
+`array' (the default) or `list'."
+    :initarg :array-type
+    :initform 'array
+    :type symbol)
+   (false-object
+    :documentation "Specifies which object to use to represent a JSON false value. It
+defaults to `:json-false'."
+    :initarg :false-object
+    :initform :json-false)
+   (null-object
+    :documentation "Specifies which object to use to represent a JSON null value.  It
+defaults to `nil`."
+    :initarg :null-object
+    :initform nil)
+   (object-type
+    :documentation "Specifies which Lisp type is used to represent objects.  It can
+be `hash-table', `alist' (the default) or `plist'."
+    :initarg :object-type
+    :initform 'alist
+    :type symbol)))
 
 (cl-defmethod plz-media-type-then ((media-type plz-media-type:application/json) response)
   "Transform the RESPONSE into a format suitable for MEDIA-TYPE."
