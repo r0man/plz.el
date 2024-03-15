@@ -439,7 +439,7 @@ not.
                    result)
                   (t (user-error "Unexpected response: %s" result))))
         (plz-http-error
-         (message "ERROR: %s" error)
+         ;; TODO: Transform body
          (signal (car error) (cdr error))))
     (apply #'plz (append (list method url) rest))))
 
