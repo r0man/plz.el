@@ -113,10 +113,12 @@ temporary filename is used."
 
 (defun plz-test-save-mock-response (buffer filename)
   "Write the plz HTTP response in BUFFER to FILENAME."
-  (with-current-buffer buffer
-    (widen)
-    (make-directory (file-name-directory filename) t)
-    (write-region (point-min) (point-max) filename)))
+  (let ((filename (expand-file-name filename)))
+    (with-current-buffer buffer
+      (widen)
+      (make-directory (file-name-directory filename) t)
+      (write-region (point-min) (point-max) filename)
+      filename)))
 
 (defmacro plz-test-with-mock-response (filename &rest body)
   "Evaluate BODY with a mocked HTTP response from FILENAME."
