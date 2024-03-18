@@ -89,21 +89,29 @@
     (should (equal 200 (plz-response-status response)))
     (should (equal 'top (car (plz-response-body response))))))
 
-(ert-deftest test-plz-media-type-parse-header ()
-  (should (null (plz-media-type-parse-header nil)))
-  (should (null (plz-media-type-parse-header "")))
-  (should (equal '("text/html") (plz-media-type-parse-header "text/html")))
-  (should (equal '("text/html" ("charset" . "UTF-8"))
-                 (plz-media-type-parse-header "text/html;charset=UTF-8")))
-  (should (equal '("text/html" ("charset" . "UTF-8") ("boundary" . "AaB03x\""))
-                 (plz-media-type-parse-header "text/html; charset=UTF-8; boundary=\"AaB03x\""))))
+(ert-deftest test-plz-media-type-parse ()
+  (should (null (plz-media-type-parse nil)))
+  (should (null (plz-media-type-parse "")))
+  (should (equal (plz-media-type :type 'text :subtype 'html)
+                 (plz-media-type-parse "text/html")))
+  (should (equal (plz-media-type
+                  :type 'text
+                  :subtype 'html
+                  :parameters '(("charset" . "UTF-8")))
+                 (plz-media-type-parse "text/html;charset=UTF-8")))
+  (should (equal (plz-media-type
+                  :type 'text
+                  :subtype 'html
+                  :parameters '(("charset" . "UTF-8")
+                                ("boundary" . "AaB03x\"")))
+                 (plz-media-type-parse "text/html; charset=UTF-8; boundary=\"AaB03x\""))))
 
 (ert-deftest test-plz-media-type-event-stream ()
   (when-let (api-key plz-test-openai-token)
     (let* ((close-events) (else) (error-events) (finally) (message-events) (open-events) (then)
            (process (plz-media-type-request 'post "https://api.openai.com/v1/chat/completions"
                       :as `(media-types
-                            ,(cons (cons "text/event-stream"
+                            ,(cons (cons 'text/event-stream
                                          (plz-media-type:text/event-stream
                                           :events `(("open" . ,(lambda (_ event)
                                                                  (push event open-events)))
@@ -165,7 +173,7 @@
     (let* ((close-events) (else) (error-events) (finally) (message-events) (open-events) (then)
            (process (plz-media-type-request 'post "MOCK-URL"
                       :as `(media-types
-                            ,(cons (cons "text/event-stream"
+                            ,(cons (cons 'text/event-stream
                                          (plz-media-type:text/event-stream
                                           :events `(("open" . ,(lambda (_ event)
                                                                  (push event open-events)))
@@ -206,7 +214,7 @@
     (let* ((close-events) (else) (error-events) (finally) (message-events) (open-events) (then)
            (process (plz-media-type-request 'post "MOCK-URL"
                       :as `(media-types
-                            ,(cons (cons "text/event-stream"
+                            ,(cons (cons 'text/event-stream
                                          (plz-media-type:text/event-stream
                                           :events `(("open" . ,(lambda (_ event)
                                                                  (push event open-events)))
@@ -272,7 +280,7 @@
   (plz-test-with-mock-response (plz-test-response "application/x-ndjson/ollama-hello.txt")
     (let* ((else) (finally) (then) (objects)
            (process (plz-media-type-request 'get "MOCK-URL"
-                      :as `(media-types (("application/x-ndjson"
+                      :as `(media-types ((application/x-ndjson
                                           . ,(plz-media-type:application/x-ndjson
                                               :handler (lambda (object)
                                                          (push object objects))))))
@@ -303,7 +311,7 @@
   (plz-test-with-mock-response (plz-test-response "application/json/vertext-unauthenticated.txt")
     (let* ((result (condition-case error
                        (plz-media-type-request 'get "MOCK-URL"
-                         :as `(media-types (("application/json" . ,(plz-media-type:application/json)))))
+                         :as `(media-types ((application/json . ,(plz-media-type:application/json)))))
                      (plz-error error))))
       (should (equal 'plz-http-error (car result)))
       (should (equal "HTTP error" (cadr result)))
@@ -318,7 +326,7 @@
   (plz-test-with-mock-response (plz-test-response "application/json/vertex-hello.txt")
     (let* ((else) (finally) (then) (objects)
            (process (plz-media-type-request 'get "MOCK-URL"
-                      :as `(media-types (("application/json"
+                      :as `(media-types ((application/json
                                           . ,(plz-media-type:application/json-array
                                               :handler (lambda (object)
                                                          (push object objects))))))
@@ -341,7 +349,7 @@
   (plz-test-with-mock-response (plz-test-response "application/json/vertex-hello.txt")
     (let* ((objects)
            (response (plz-media-type-request 'get "MOCK-URL"
-                       :as `(media-types (("application/json"
+                       :as `(media-types ((application/json
                                            . ,(plz-media-type:application/json-array
                                                :handler (lambda (object)
                                                           (push object objects)))))))))
@@ -353,7 +361,7 @@
   (plz-test-with-mock-response (plz-test-response "application/json/vertext-unauthenticated.txt")
     (let* ((else) (finally) (then) (objects)
            (process (plz-media-type-request 'get "MOCK-URL"
-                      :as `(media-types (("application/json"
+                      :as `(media-types ((application/json
                                           . ,(plz-media-type:application/json-array
                                               :handler (lambda (object)
                                                          (push object objects))))))
@@ -378,7 +386,7 @@
     (let* ((objects)
            (result (condition-case error
                        (plz-media-type-request 'get "MOCK-URL"
-                         :as `(media-types (("application/json"
+                         :as `(media-types ((application/json
                                              . ,(plz-media-type:application/json-array
                                                  :handler (lambda (object)
                                                             (push object objects)))))))
