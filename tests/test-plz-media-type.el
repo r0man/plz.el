@@ -89,6 +89,15 @@
     (should (equal 200 (plz-response-status response)))
     (should (equal 'top (car (plz-response-body response))))))
 
+(ert-deftest test-plz-media-type-parse-header ()
+  (should (null (plz-media-type-parse-header nil)))
+  (should (null (plz-media-type-parse-header "")))
+  (should (equal '("text/html") (plz-media-type-parse-header "text/html")))
+  (should (equal '("text/html" ("charset" . "UTF-8"))
+                 (plz-media-type-parse-header "text/html;charset=UTF-8")))
+  (should (equal '("text/html" ("charset" . "UTF-8") ("boundary" . "AaB03x\""))
+                 (plz-media-type-parse-header "text/html; charset=UTF-8; boundary=\"AaB03x\""))))
+
 (ert-deftest test-plz-media-type-event-stream ()
   (when-let (api-key plz-test-openai-token)
     (let* ((close-events) (else) (error-events) (finally) (message-events) (open-events) (then)

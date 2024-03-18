@@ -50,6 +50,23 @@
 (cl-defgeneric plz-media-type-process (media-type process chunk)
   "Process the CHUNK according to MEDIA-TYPE using PROCESS.")
 
+(defun plz-media-type-parse-header (header)
+  "Parse the Content-Type HEADER.
+
+Return a cons cell where the car is the MIME type, and the cdr is
+an alist of parameters."
+  (unless (or (null header) (string-blank-p header))
+    (let* ((components (split-string header ";"))
+           (mime-type (string-trim (car components)))
+           (parameters-list (cdr components))
+           (parameters-alist '()))
+      (dolist (param parameters-list parameters-alist)
+        (let* ((key-value (split-string param "="))
+               (key (string-trim (car key-value)))
+               (value (string-trim (cadr key-value) "\"")))
+          (setq parameters-alist (cons (cons key value) parameters-alist))))
+      (cons mime-type (nreverse parameters-alist)))))
+
 (defun plz-media-type--content-type (response)
   "Return the content type header of RESPONSE, or nil if it's not set."
   (let ((headers (plz-response-headers response)))
