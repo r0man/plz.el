@@ -49,13 +49,22 @@
     :initform nil
     :subtype list)))
 
+(defun plz-media-type-charset (media-type)
+  "Return the character set of the MEDIA-TYPE."
+  (with-slots (parameters) media-type
+    (alist-get "charset" parameters nil nil #'equal)))
+
+(defun plz-media-type-coding-system (media-type)
+  "Return the coding system of the MEDIA-TYPE."
+  (coding-system-from-name (or (plz-media-type-charset media-type) "UTF-8")))
+
 (defun plz-media-type-name (media-type)
-  "Return the name of MEDIA-TYPE."
+  "Return the name of the MEDIA-TYPE as a string."
   (with-slots (type subtype) media-type
     (format "%s/%s" type subtype)))
 
 (defun plz-media-type-symbol (media-type)
-  "Return the name of MEDIA-TYPE as a symbol."
+  "Return the name of the MEDIA-TYPE as a symbol."
   (intern (plz-media-type-name media-type)))
 
 (cl-defgeneric plz-media-type-else (media-type error)
@@ -140,11 +149,15 @@ CHUNK is a part of the HTTP body."
               (let ((body-start (point)))
                 (goto-char (point-min))
                 (let* ((response (prog1 (plz--response) (widen)))
-                       (media-type (plz-media-type--of-response media-types response)))
+                       (media-type (plz-media-type--of-response media-types response))
+                       (coding-system (plz-media-type-coding-system media-type)))
+                  (decode-coding-region (point) (point-max) coding-system)
+                  (setq-local buffer-file-coding-system coding-system)
                   (setq-local plz-media-type--current media-type)
                   (when-let (body (plz-response-body response))
                     (when (> (length body) 0)
-                      (delete-region body-start (point-max))
+                      (setf (plz-response-body response)
+                            (delete-and-extract-region body-start (point-max)))
                       (set-marker (process-mark process) (point))
                       (plz-media-type-process media-type process response)))
                   (setf (plz-response-body response) nil)
