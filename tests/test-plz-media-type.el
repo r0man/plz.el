@@ -151,6 +151,87 @@
                                       content))))
                        (string-join)))))))
 
+(ert-deftest test-plz-media-type-text/event-stream ()
+  (plz-test-with-mock-response (plz-test-response "text/event-stream/openai-hello.txt")
+    (let* ((close-events) (else) (error-events) (finally) (message-events) (open-events) (then)
+           (process (plz-media-type-request 'post "MOCK-URL"
+                      :as `(media-types
+                            ,(cons (cons "text/event-stream"
+                                         (plz-media-type:text/event-stream
+                                          :events `(("open" . ,(lambda (_ event)
+                                                                 (push event open-events)))
+                                                    ("message" . ,(lambda (_ event)
+                                                                    (push event message-events)))
+                                                    ("error" . ,(lambda (_ event)
+                                                                  (push event error-events)))
+                                                    ("close" . ,(lambda (_ event)
+                                                                  (push event close-events))))))
+                                   plz-media-types))
+                      :else (lambda (object) (push object else))
+                      :finally (lambda () (push t finally))
+                      :then (lambda (object) (push object then)))))
+      (plz-test-wait process)
+      (should (null else))
+      (should (equal '(t) finally))
+      (should (equal 1 (length open-events)))
+      (seq-doseq (event open-events)
+        (with-slots (data type) event
+          (should (equal "open" type))
+          (should (plz-response-p data))
+          (should (equal 200 (plz-response-status data)))
+          (should (null (plz-response-body data)))))
+      (should (equal 0 (length error-events)))
+      (should (equal 1 (length close-events)))
+      (seq-doseq (event close-events)
+        (with-slots (data type) event
+          (should (equal "close" type))
+          (should (plz-response-p data))
+          (should (equal 200 (plz-response-status data)))
+          (should (null (plz-response-body data)))))
+      (should (equal 12 (length message-events)))
+      (should (equal "Hello! How can I assist you today?"
+                     (plz-test-openai-extract-content message-events))))))
+
+(ert-deftest test-plz-media-type-text/event-stream-emoji ()
+  (plz-test-with-mock-response (plz-test-response "text/event-stream/openai-emoji.txt")
+    (let* ((close-events) (else) (error-events) (finally) (message-events) (open-events) (then)
+           (process (plz-media-type-request 'post "MOCK-URL"
+                      :as `(media-types
+                            ,(cons (cons "text/event-stream"
+                                         (plz-media-type:text/event-stream
+                                          :events `(("open" . ,(lambda (_ event)
+                                                                 (push event open-events)))
+                                                    ("message" . ,(lambda (_ event)
+                                                                    (push event message-events)))
+                                                    ("error" . ,(lambda (_ event)
+                                                                  (push event error-events)))
+                                                    ("close" . ,(lambda (_ event)
+                                                                  (push event close-events))))))
+                                   plz-media-types))
+                      :else (lambda (object) (push object else))
+                      :finally (lambda () (push t finally))
+                      :then (lambda (object) (push object then)))))
+      (plz-test-wait process)
+      (should (null else))
+      (should (equal '(t) finally))
+      (should (equal 1 (length open-events)))
+      (seq-doseq (event open-events)
+        (with-slots (data type) event
+          (should (equal "open" type))
+          (should (plz-response-p data))
+          (should (equal 200 (plz-response-status data)))
+          (should (null (plz-response-body data)))))
+      (should (equal 0 (length error-events)))
+      (should (equal 1 (length close-events)))
+      (seq-doseq (event close-events)
+        (with-slots (data type) event
+          (should (equal "close" type))
+          (should (plz-response-p data))
+          (should (equal 200 (plz-response-status data)))
+          (should (null (plz-response-body data)))))
+      (should (equal 4 (length message-events)))
+      (should (equal "🙂" (plz-test-openai-extract-content message-events))))))
+
 (ert-deftest test-plz-media-type-chat-completions-as-application/octet-stream ()
   (when-let (api-key plz-test-openai-token)
     (let* ((else) (finally) (then)
@@ -245,15 +326,7 @@
         (should (string-match "" (plz-response-body response))))
       (should (equal 2 (length objects)))
       (should (equal '("Hi there!" " How can I assist you today?")
-                     (thread-last
-                       objects
-                       (seq-map (lambda (object)
-                                  (seq-mapcat (lambda (candidate)
-                                                (alist-get 'parts (cdar candidate)))
-                                              (alist-get 'candidates object))))
-                       (seq-map (lambda (part)
-                                  (alist-get 'text (car part))))
-                       (reverse)))))))
+                     (plz-test-vertex-extract-content objects))))))
 
 (ert-deftest test-plz-media-type-application/json-array-sync ()
   (plz-test-with-mock-response (plz-test-response "application/json/vertex-hello.txt")

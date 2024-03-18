@@ -32,21 +32,6 @@
 (require 'plz-event-source)
 (require 'plz-test)
 
-(defun test-plz-event-source--render-contents (events)
-  "Render the contents of the completion EVENTS."
-  (thread-last
-    (reverse events)
-    (seq-map (lambda (event)
-               (with-slots (data) event
-                 (unless (equal "[DONE]" data)
-                   (when-let ((data (json-parse-string data))
-                              (choice (seq-first (map-elt data "choices")))
-                              (delta (map-elt choice "delta"))
-                              (content (map-elt delta "content")))
-                     content)))))
-    (seq-remove #'null)
-    (string-join)))
-
 (ert-deftest test-plz-event-source-parse-mutli-line-event ()
   (with-temp-buffer
     (let ((event-1 (plz-event-source-event
@@ -315,7 +300,7 @@
                         (seq-map #'plz-event-source-event-type
                                  (reverse all-events)))))
         (should (equal "Hello! How can I assist you today?"
-                       (test-plz-event-source--render-contents message-events)))))))
+                       (plz-test-openai-extract-content message-events)))))))
 
 (ert-deftest test-plz-event-source-media-type-sync:text/event-stream ()
   (when-let (api-key plz-test-openai-token)
@@ -360,7 +345,7 @@
           (should (equal 200 (plz-response-status data)))
           (should (null (plz-response-body data)))))
       (should (equal "Hello! How can I assist you today?"
-                     (test-plz-event-source--render-contents message-events))))))
+                     (plz-test-openai-extract-content message-events))))))
 
 ;;;; footer
 

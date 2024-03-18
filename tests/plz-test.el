@@ -36,6 +36,7 @@
 (require 'map)
 
 (require 'plz)
+(require 'plz-event-source)
 
 ;;;; Variables
 
@@ -134,6 +135,33 @@ temporary filename is used."
             filename
           (error "No such HTTP response file: %s" filename)))
     (error "Can't locate dominating plz.el file")))
+
+(defun plz-test-openai-extract-content (events)
+  "Extract the content of the OpenAI EVENTS."
+  (thread-last
+    (reverse events)
+    (seq-map (lambda (event)
+               (with-slots (data) event
+                 (unless (equal "[DONE]" data)
+                   (when-let ((data (json-parse-string data))
+                              (choice (seq-first (map-elt data "choices")))
+                              (delta (map-elt choice "delta"))
+                              (content (map-elt delta "content")))
+                     content)))))
+    (seq-remove #'null)
+    (string-join)))
+
+(defun plz-test-vertex-extract-content (objects)
+  "Extract the content of the Vertext OBJECTS."
+  (thread-last
+    objects
+    (seq-map (lambda (object)
+               (seq-mapcat (lambda (candidate)
+                             (alist-get 'parts (cdar candidate)))
+                           (alist-get 'candidates object))))
+    (seq-map (lambda (part)
+               (alist-get 'text (car part))))
+    (reverse)))
 
 ;;;; Footer
 
