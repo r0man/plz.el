@@ -40,9 +40,6 @@
 
 ;;;; Variables
 
-(defvar plz-test-openai-token
-  (auth-source-pick-first-password :host "openai.com" :user "ellama"))
-
 (defvar plz-test-uri-prefix
   ;; "https://httpbin.org"
   "http://localhost"

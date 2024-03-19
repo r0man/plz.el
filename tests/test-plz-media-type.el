@@ -33,7 +33,7 @@
 (require 'plz-media-type)
 (require 'plz-test)
 
-(plz-deftest test-plz-media-type-json-async ()
+(plz-deftest test-plz-media-type:application/json:async ()
   (let* ((response)
          (process (plz-media-type-request 'get (url "/json")
                     :as `(media-types ,plz-media-types)
@@ -45,7 +45,7 @@
     (let-alist (plz-response-body response)
       (should (equal "Sample Slide Show" .slideshow.title)))))
 
-(plz-deftest test-plz-media-type-json-sync ()
+(plz-deftest test-plz-media-type:application/json:sync ()
   (let ((response (plz-media-type-request 'get (url "/json")
                     :as `(media-types ,plz-media-types))))
     (should (plz-response-p response))
@@ -53,7 +53,22 @@
     (let-alist (plz-response-body response)
       (should (equal "Sample Slide Show" .slideshow.title)))))
 
-(plz-deftest test-plz-media-type-html-async ()
+(ert-deftest test-plz-media-type:application/json:sync-error ()
+  (plz-test-with-mock-response (plz-test-response "application/json/vertext-unauthenticated.txt")
+    (let* ((result (condition-case error
+                       (plz-media-type-request 'get "MOCK-URL"
+                         :as `(media-types ((application/json . ,(plz-media-type:application/json)))))
+                     (plz-error error))))
+      (should (equal 'plz-http-error (car result)))
+      (should (equal "HTTP error" (cadr result)))
+      (let ((error (caddr result)))
+        (should (plz-error-p error))
+        (let ((response (plz-error-response error)))
+          (should (plz-response-p response))
+          (should (equal 401 (plz-response-status response)))
+          (should (equal '(code . 401) (cadar (elt (plz-response-body response) 0)))))))))
+
+(plz-deftest test-plz-media-type:text/html:async ()
   (let* ((response)
          (process (plz-media-type-request 'get (url "/html")
                     :as `(media-types ,plz-media-types)
@@ -64,14 +79,14 @@
     (should (equal 200 (plz-response-status response)))
     (should (equal 'html (car (plz-response-body response))))))
 
-(plz-deftest test-plz-media-type-html-sync ()
+(plz-deftest test-plz-media-type:text/html:sync ()
   (let ((response (plz-media-type-request 'get (url "/html")
                     :as `(media-types ,plz-media-types))))
     (should (plz-response-p response))
     (should (equal 200 (plz-response-status response)))
     (should (equal 'html (car (plz-response-body response))))))
 
-(plz-deftest test-plz-media-type-xml-async ()
+(plz-deftest test-plz-media-type:application/xml:async ()
   (let* ((response)
          (process (plz-media-type-request 'get (url "/xml")
                     :as `(media-types ,plz-media-types)
@@ -82,7 +97,7 @@
     (should (equal 200 (plz-response-status response)))
     (should (equal 'top (car (plz-response-body response))))))
 
-(plz-deftest test-plz-media-type-xml-sync ()
+(plz-deftest test-plz-media-type:application/xml:sync ()
   (let ((response (plz-media-type-request 'get (url "/xml")
                     :as `(media-types ,plz-media-types))))
     (should (plz-response-p response))
@@ -120,69 +135,7 @@
   (let ((media-type (plz-media-type-parse "text/html")))
     (should (equal 'text/html (plz-media-type-symbol media-type)))))
 
-(ert-deftest test-plz-media-type-event-stream ()
-  (when-let (api-key plz-test-openai-token)
-    (let* ((close-events) (else) (error-events) (finally) (message-events) (open-events) (then)
-           (process (plz-media-type-request 'post "https://api.openai.com/v1/chat/completions"
-                      :as `(media-types
-                            ,(cons (cons 'text/event-stream
-                                         (plz-media-type:text/event-stream
-                                          :events `((open . ,(lambda (_ event)
-                                                               (push event open-events)))
-                                                    (message . ,(lambda (_ event)
-                                                                  (push event message-events)))
-                                                    (error . ,(lambda (_ event)
-                                                                (push event error-events)))
-                                                    (close . ,(lambda (_ event)
-                                                                (push event close-events))))))
-                                   plz-media-types))
-                      :body (json-encode
-                             '(("model" . "gpt-3.5-turbo")
-                               ("messages" . [(("role" . "system")
-                                               ("content" . "You are an assistant."))
-                                              (("role" . "user")
-                                               ("content" . "Hello"))])
-                               ("stream" . t)
-                               ("temperature" . 0.001)))
-                      :headers `(("Authorization" . ,(format "Bearer %s" api-key))
-                                 ("Content-Type" . "application/json"))
-                      :else (lambda (object) (push object else))
-                      :finally (lambda () (push t finally))
-                      :then (lambda (object) (push object then)))))
-      (plz-test-wait process)
-      (should (null else))
-      (should (equal '(t) finally))
-      (should (equal 1 (length open-events)))
-      (seq-doseq (event open-events)
-        (with-slots (data type) event
-          (should (equal 'open type))
-          (should (plz-response-p data))
-          (should (equal 200 (plz-response-status data)))
-          (should (null (plz-response-body data)))))
-      (should (equal 0 (length error-events)))
-      (should (equal 1 (length close-events)))
-      (seq-doseq (event close-events)
-        (with-slots (data type) event
-          (should (equal 'close type))
-          (should (plz-response-p data))
-          (should (equal 200 (plz-response-status data)))
-          (should (null (plz-response-body data)))))
-      (should (equal "Hello! How can I assist you today?"
-                     (thread-last
-                       (reverse message-events)
-                       (seq-filter (lambda (event)
-                                     (with-slots (data type) event
-                                       (not (equal "[DONE]" data)))))
-                       (seq-map (lambda (event)
-                                  (with-slots (data) event
-                                    (when-let ((data (json-parse-string data))
-                                               (choice (seq-first (map-elt data "choices")))
-                                               (delta (map-elt choice "delta"))
-                                               (content (map-elt delta "content")))
-                                      content))))
-                       (string-join)))))))
-
-(ert-deftest test-plz-media-type-text/event-stream ()
+(ert-deftest test-plz-media-type:text/event-stream ()
   (plz-test-with-mock-response (plz-test-response "text/event-stream/openai-hello.txt")
     (let* ((close-events) (else) (error-events) (finally) (message-events) (open-events) (then)
            (process (plz-media-type-request 'post "MOCK-URL"
@@ -223,7 +176,7 @@
       (should (equal "Hello! How can I assist you today?"
                      (plz-test-openai-extract-content message-events))))))
 
-(ert-deftest test-plz-media-type-text/event-stream-emoji ()
+(ert-deftest test-plz-media-type:text/event-stream:emoji ()
   (plz-test-with-mock-response (plz-test-response "text/event-stream/openai-emoji.txt")
     (let* ((close-events) (else) (error-events) (finally) (message-events) (open-events) (then)
            (process (plz-media-type-request 'post "MOCK-URL"
@@ -263,21 +216,11 @@
       (should (equal 4 (length message-events)))
       (should (equal "🙂" (plz-test-openai-extract-content message-events))))))
 
-(ert-deftest test-plz-media-type-chat-completions-as-application/octet-stream ()
-  (when-let (api-key plz-test-openai-token)
+(ert-deftest test-plz-media-type:application/octet-stream:stream ()
+  (plz-test-with-mock-response (plz-test-response "text/event-stream/openai-hello.txt")
     (let* ((else) (finally) (then)
            (process (plz-media-type-request 'post "https://api.openai.com/v1/chat/completions"
                       :as `(media-types `((t . ,(plz-media-type:application/octet-stream))))
-                      :body (json-encode
-                             '(("model" . "gpt-3.5-turbo")
-                               ("messages" . [(("role" . "system")
-                                               ("content" . "You are an assistant."))
-                                              (("role" . "user")
-                                               ("content" . "Hello"))])
-                               ("stream" . t)
-                               ("temperature" . 0.001)))
-                      :headers `(("Authorization" . ,(format "Bearer %s" api-key))
-                                 ("Content-Type" . "application/json"))
                       :else (lambda (object) (push object else))
                       :finally (lambda () (push t finally))
                       :then (lambda (object) (push object then)))))
@@ -290,7 +233,7 @@
         (should (equal 200 (plz-response-status response)))
         (should (string-match "[DONE]" (plz-response-body response)))))))
 
-(ert-deftest test-plz-media-type-application/x-ndjson ()
+(ert-deftest test-plz-media-type:application/x-ndjson ()
   (plz-test-with-mock-response (plz-test-response "application/x-ndjson/ollama-hello.txt")
     (let* ((else) (finally) (then) (objects)
            (process (plz-media-type-request 'get "MOCK-URL"
@@ -321,22 +264,7 @@
                        (done . :json-false))
                      (seq-elt objects 1))))))
 
-(ert-deftest test-plz-media-type-application/json-sync-error ()
-  (plz-test-with-mock-response (plz-test-response "application/json/vertext-unauthenticated.txt")
-    (let* ((result (condition-case error
-                       (plz-media-type-request 'get "MOCK-URL"
-                         :as `(media-types ((application/json . ,(plz-media-type:application/json)))))
-                     (plz-error error))))
-      (should (equal 'plz-http-error (car result)))
-      (should (equal "HTTP error" (cadr result)))
-      (let ((error (caddr result)))
-        (should (plz-error-p error))
-        (let ((response (plz-error-response error)))
-          (should (plz-response-p response))
-          (should (equal 401 (plz-response-status response)))
-          (should (equal '(code . 401) (cadar (elt (plz-response-body response) 0)))))))))
-
-(ert-deftest test-plz-media-type-application/json-array-async ()
+(ert-deftest test-plz-media-type:application/json-array:async ()
   (plz-test-with-mock-response (plz-test-response "application/json/vertex-hello.txt")
     (let* ((else) (finally) (then) (objects)
            (process (plz-media-type-request 'get "MOCK-URL"
@@ -359,7 +287,7 @@
       (should (equal '("Hi there!" " How can I assist you today?")
                      (plz-test-vertex-extract-content objects))))))
 
-(ert-deftest test-plz-media-type-application/json-array-sync ()
+(ert-deftest test-plz-media-type:application/json-array:sync ()
   (plz-test-with-mock-response (plz-test-response "application/json/vertex-hello.txt")
     (let* ((objects)
            (response (plz-media-type-request 'get "MOCK-URL"
@@ -371,7 +299,7 @@
       (should (equal 200 (plz-response-status response)))
       (should (string-match "" (plz-response-body response))))))
 
-(ert-deftest test-plz-media-type-application/json-array-async-error ()
+(ert-deftest test-plz-media-type:application/json-array:async-error ()
   (plz-test-with-mock-response (plz-test-response "application/json/vertext-unauthenticated.txt")
     (let* ((else) (finally) (then) (objects)
            (process (plz-media-type-request 'get "MOCK-URL"
@@ -395,7 +323,7 @@
       (should (equal 1 (length objects)))
       (should (equal '(code . 401) (cadaar objects))))))
 
-(ert-deftest test-plz-media-type-application/json-array-sync-error ()
+(ert-deftest test-plz-media-type:application/json-array:sync-error ()
   (plz-test-with-mock-response (plz-test-response "application/json/vertext-unauthenticated.txt")
     (let* ((objects)
            (result (condition-case error

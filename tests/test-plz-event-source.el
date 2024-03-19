@@ -236,7 +236,7 @@
         (should (equal "" (buffer-string)))))))
 
 (ert-deftest test-plz-event-source-http-event-source ()
-  (when-let (api-key (auth-source-pick-first-password :host "openai.com" :user "ellama"))
+  (plz-test-with-mock-response (plz-test-response "text/event-stream/openai-hello.txt")
     (let* ((all-events) (close-events) (error-events) (message-events) (open-events)
            (source (plz-http-event-source
                     :url "https://api.openai.com/v1/chat/completions"
@@ -248,7 +248,7 @@
                                                            ("content" . "Hello"))])
                                            ("stream" . t)
                                            ("temperature" . 0.001))))
-                               (headers . (("Authorization" . ,(format "Bearer %s" api-key))
+                               (headers . (("Authorization" . ,(format "Bearer %s" "MOCK-KEY"))
                                            ("Content-Type" . "application/json")))
                                (method . post))
                     :handlers `((open . ,(lambda (source event)
@@ -303,7 +303,7 @@
                        (plz-test-openai-extract-content message-events)))))))
 
 (ert-deftest test-plz-event-source-media-type-sync:text/event-stream ()
-  (when-let (api-key plz-test-openai-token)
+  (plz-test-with-mock-response (plz-test-response "text/event-stream/openai-hello.txt")
     (let* ((close-events) (error-events) (message-events) (open-events)
            (response (plz-media-type-request 'post "https://api.openai.com/v1/chat/completions"
                        :as `(media-types
@@ -315,17 +315,7 @@
                                                (error . ,(lambda (_ event)
                                                            (push event error-events)))
                                                (close . ,(lambda (_ event)
-                                                           (push event close-events))))))))
-                       :body (json-encode
-                              '(("model" . "gpt-3.5-turbo")
-                                ("messages" . [(("role" . "system")
-                                                ("content" . "You are an assistant."))
-                                               (("role" . "user")
-                                                ("content" . "Hello"))])
-                                ("stream" . t)
-                                ("temperature" . 0.001)))
-                       :headers `(("Authorization" . ,(format "Bearer %s" api-key))
-                                  ("Content-Type" . "application/json")))))
+                                                           (push event close-events)))))))))))
       (should (plz-response-p response))
       (should (equal 200 (plz-response-status response)))
       (should (string-match "" (plz-response-body response)))
