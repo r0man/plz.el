@@ -127,14 +127,14 @@
                       :as `(media-types
                             ,(cons (cons 'text/event-stream
                                          (plz-media-type:text/event-stream
-                                          :events `(("open" . ,(lambda (_ event)
-                                                                 (push event open-events)))
-                                                    ("message" . ,(lambda (_ event)
-                                                                    (push event message-events)))
-                                                    ("error" . ,(lambda (_ event)
-                                                                  (push event error-events)))
-                                                    ("close" . ,(lambda (_ event)
-                                                                  (push event close-events))))))
+                                          :events `((open . ,(lambda (_ event)
+                                                               (push event open-events)))
+                                                    (message . ,(lambda (_ event)
+                                                                  (push event message-events)))
+                                                    (error . ,(lambda (_ event)
+                                                                (push event error-events)))
+                                                    (close . ,(lambda (_ event)
+                                                                (push event close-events))))))
                                    plz-media-types))
                       :body (json-encode
                              '(("model" . "gpt-3.5-turbo")
@@ -155,7 +155,7 @@
       (should (equal 1 (length open-events)))
       (seq-doseq (event open-events)
         (with-slots (data type) event
-          (should (equal "open" type))
+          (should (equal 'open type))
           (should (plz-response-p data))
           (should (equal 200 (plz-response-status data)))
           (should (null (plz-response-body data)))))
@@ -163,7 +163,7 @@
       (should (equal 1 (length close-events)))
       (seq-doseq (event close-events)
         (with-slots (data type) event
-          (should (equal "close" type))
+          (should (equal 'close type))
           (should (plz-response-p data))
           (should (equal 200 (plz-response-status data)))
           (should (null (plz-response-body data)))))
@@ -189,14 +189,14 @@
                       :as `(media-types
                             ,(cons (cons 'text/event-stream
                                          (plz-media-type:text/event-stream
-                                          :events `(("open" . ,(lambda (_ event)
-                                                                 (push event open-events)))
-                                                    ("message" . ,(lambda (_ event)
-                                                                    (push event message-events)))
-                                                    ("error" . ,(lambda (_ event)
-                                                                  (push event error-events)))
-                                                    ("close" . ,(lambda (_ event)
-                                                                  (push event close-events))))))
+                                          :events `((open . ,(lambda (_ event)
+                                                               (push event open-events)))
+                                                    (message . ,(lambda (_ event)
+                                                                  (push event message-events)))
+                                                    (error . ,(lambda (_ event)
+                                                                (push event error-events)))
+                                                    (close . ,(lambda (_ event)
+                                                                (push event close-events))))))
                                    plz-media-types))
                       :else (lambda (object) (push object else))
                       :finally (lambda () (push t finally))
@@ -207,7 +207,7 @@
       (should (equal 1 (length open-events)))
       (seq-doseq (event open-events)
         (with-slots (data type) event
-          (should (equal "open" type))
+          (should (equal 'open type))
           (should (plz-response-p data))
           (should (equal 200 (plz-response-status data)))
           (should (null (plz-response-body data)))))
@@ -215,7 +215,7 @@
       (should (equal 1 (length close-events)))
       (seq-doseq (event close-events)
         (with-slots (data type) event
-          (should (equal "close" type))
+          (should (equal 'close type))
           (should (plz-response-p data))
           (should (equal 200 (plz-response-status data)))
           (should (null (plz-response-body data)))))
@@ -230,14 +230,14 @@
                       :as `(media-types
                             ,(cons (cons 'text/event-stream
                                          (plz-media-type:text/event-stream
-                                          :events `(("open" . ,(lambda (_ event)
-                                                                 (push event open-events)))
-                                                    ("message" . ,(lambda (_ event)
-                                                                    (push event message-events)))
-                                                    ("error" . ,(lambda (_ event)
-                                                                  (push event error-events)))
-                                                    ("close" . ,(lambda (_ event)
-                                                                  (push event close-events))))))
+                                          :events `((open . ,(lambda (_ event)
+                                                               (push event open-events)))
+                                                    (message . ,(lambda (_ event)
+                                                                  (push event message-events)))
+                                                    (error . ,(lambda (_ event)
+                                                                (push event error-events)))
+                                                    (close . ,(lambda (_ event)
+                                                                (push event close-events))))))
                                    plz-media-types))
                       :else (lambda (object) (push object else))
                       :finally (lambda () (push t finally))
@@ -248,7 +248,7 @@
       (should (equal 1 (length open-events)))
       (seq-doseq (event open-events)
         (with-slots (data type) event
-          (should (equal "open" type))
+          (should (equal 'open type))
           (should (plz-response-p data))
           (should (equal 200 (plz-response-status data)))
           (should (null (plz-response-body data)))))
@@ -256,7 +256,7 @@
       (should (equal 1 (length close-events)))
       (seq-doseq (event close-events)
         (with-slots (data type) event
-          (should (equal "close" type))
+          (should (equal 'close type))
           (should (plz-response-p data))
           (should (equal 200 (plz-response-status data)))
           (should (null (plz-response-body data)))))
