@@ -33,7 +33,6 @@
 
 (require 'cl-lib)
 (require 'eieio)
-(require 'pcase)
 (require 'plz)
 (require 'plz-media-type)
 (require 'rx)
