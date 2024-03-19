@@ -344,6 +344,35 @@
       (should (equal 1 (length objects)))
       (should (equal '(code . 401) (cadaar objects))))))
 
+(plz-deftest plz-media-type-request-timeout-sync ()
+  (pcase-let* ((start-time (current-time))
+               (`(,_signal . (,_message ,(cl-struct plz-error (curl-error `(,code . ,message)))))
+		(should-error (plz-media-type-request 'get (url "/delay/5")
+				:as `(media-types ,plz-media-types)
+                                :then 'sync
+                                :timeout 1)
+			      :type 'plz-error))
+               (end-time (current-time)))
+    (should (eq 28 code))
+    (should (equal "Operation timeout." message))
+    (should (< (time-to-seconds (time-subtract end-time start-time)) 1.1))))
+
+(plz-deftest plz-media-type-request-timeout-async ()
+  (let* ((start-time (current-time))
+         (end-time)
+         (plz-error)
+         (process (plz-media-type-request 'get (url "/delay/5")
+                    :as `(media-types ,plz-media-types)
+                    :timeout 1
+                    :then #'ignore
+                    :else (lambda (e)
+                            (setf end-time (current-time)
+                                  plz-error e)))))
+    (plz-test-wait process)
+    (should (eq 28 (car (plz-error-curl-error plz-error))))
+    (should (equal "Operation timeout." (cdr (plz-error-curl-error plz-error))))
+    (should (< (time-to-seconds (time-subtract end-time start-time)) 1.1))))
+
 ;;;; Footer
 
 (provide 'test-plz-media-type)
