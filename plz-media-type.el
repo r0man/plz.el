@@ -487,7 +487,6 @@ not.
                            :decode decode
                            :else (when (functionp else)
                                    (lambda (error)
-                                     ;; (widen)
                                      (funcall else (plz-media-type-else
                                                     plz-media-type--current
                                                     error))))
