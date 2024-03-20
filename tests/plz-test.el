@@ -102,7 +102,7 @@ temporary filename is used."
     (with-temp-buffer
       (insert "#!/usr/bin/env bash")
       (newline)
-      (insert "cat " (expand-file-name response-file) " | pv --quiet --rate-limit 1000")
+      (insert "cat " (expand-file-name response-file) " | pv --quiet --rate-limit 10000")
       (newline)
       (make-directory (file-name-directory mock-file) t)
       (write-region (point-min) (point-max) mock-file)
