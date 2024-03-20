@@ -282,6 +282,7 @@ be `hash-table', `alist' (the default) or `plist'."
   "Transform the RESPONSE into a format suitable for MEDIA-TYPE."
   (ignore media-type)
   (plz-media-type:application/json-array--parse-stream media-type)
+  (setf (plz-response-body response) nil)
   response)
 
 ;; Content Type: application/x-ndjson
