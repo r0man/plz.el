@@ -287,6 +287,30 @@
       (should (equal '("Hi there!" " How can I assist you today?")
                      (plz-test-vertex-extract-content objects))))))
 
+(ert-deftest test-plz-media-type:application/json-array:async-poem ()
+  (plz-test-with-mock-response (plz-test-response "application/json/vertex-poem.txt")
+    (let* ((else) (finally) (then) (objects)
+           (process (plz-media-type-request 'get "MOCK-URL"
+                      :as `(media-types ((application/json
+                                          . ,(plz-media-type:application/json-array
+                                              :handler (lambda (object)
+                                                         (push object objects))))))
+                      :else (lambda (object) (push object else))
+                      :finally (lambda () (push t finally))
+                      :then (lambda (object) (push object then)))))
+      (plz-test-wait process)
+      (should (null else))
+      (should (equal '(t) finally))
+      (should (equal 1 (length then)))
+      (seq-doseq (response then)
+        (should (plz-response-p response))
+        (should (equal 200 (plz-response-status response)))
+        (should (null (plz-response-body response))))
+      (should (equal 7 (length objects)))
+      (let ((parts (plz-test-vertex-extract-content objects)))
+        (should (string-match "**Ode to Emacs, Master of Code" (cl-first parts)))
+        (should (equal '(" the sorcerer, dispels all dooms.") (last parts)))))))
+
 (ert-deftest test-plz-media-type:application/json-array:sync ()
   (plz-test-with-mock-response (plz-test-response "application/json/vertex-hello.txt")
     (let* ((objects)
@@ -343,7 +367,7 @@
         (let ((response (plz-error-response error)))
           (should (plz-response-p response))
           (should (equal 401 (plz-response-status response)))
-          (should (equal "" (plz-response-body response)))))
+          (should (null (plz-response-body response)))))
       (should (equal 1 (length objects)))
       (should (equal '(code . 401) (cadaar objects))))))
 
