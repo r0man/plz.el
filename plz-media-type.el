@@ -235,7 +235,15 @@ defaults to `nil`."
 be `hash-table', `alist' (the default) or `plist'."
     :initarg :object-type
     :initform 'alist
-    :type symbol)))
+    :type symbol))
+  "A media type class that handles the processing of HTTP responses
+in the JSON format.  The HTTP response is processed in a
+non-streaming way.  After the response has been received, the
+body of the plz-response struct is set to the result of parsing
+the HTTP response body with the `json-parse-buffer' function.
+The arguments to the `json-parse-buffer' can be customized by
+making an instance of this class and setting its slots
+accordingly.")
 
 (defun plz-media-type--parse-json-object (media-type)
   "Parse the JSON object in the current buffer according to MEDIA-TYPE."
