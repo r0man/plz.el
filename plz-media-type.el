@@ -404,7 +404,13 @@ function.")
 
 (defclass plz-media-type:text/html (plz-media-type:application/xml)
   ((type :initform 'text)
-   (subtype :initform 'xml)))
+   (subtype :initform 'xml))
+    "A media type class that handles the processing of HTTP responses
+in the HTML format.  The HTTP response is processed in a
+non-streaming way.  After the response has been received, the
+body of the plz-response struct is set to the result of parsing
+the HTTP response body with the `libxml-parse-html-region'
+function.")
 
 (defvar plz-media-types
   `((application/json . ,(plz-media-type:application/json))
