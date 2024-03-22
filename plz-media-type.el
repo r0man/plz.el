@@ -386,7 +386,13 @@ will always be set to nil.")
 ;; Content Type: application/xml
 
 (defclass plz-media-type:application/xml (plz-media-type:application/octet-stream)
-  ((subtype :initform 'xml)))
+  ((subtype :initform 'xml))
+  "A media type class that handles the processing of HTTP responses
+in the XML format.  The HTTP response is processed in a
+non-streaming way.  After the response has been received, the
+body of the plz-response struct is set to the result of parsing
+the HTTP response body with the `libxml-parse-html-region'
+function.")
 
 (cl-defmethod plz-media-type-then ((media-type plz-media-type:application/xml) response)
   "Transform the RESPONSE into a format suitable for MEDIA-TYPE."
