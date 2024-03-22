@@ -264,7 +264,15 @@ accordingly.")
   ((handler
     :documentation "A function that will be called for each object in the JSON array."
     :initarg :handler
-    :type (or function symbol))))
+    :type (or function symbol)))
+  "A media type class that handles the processing of HTTP responses
+in a JSON format that assumes that the object at the top level is
+an array.  The HTTP response is processed in a streaming way.
+Each object in the top level array will be parsed with the
+`json-parse-buffer' function.  The function in the :handler slot
+will be called each time a new object arrives.  The body slot of
+the plz-response struct passed to the THEN and ELSE callbacks
+will always be set to nil.")
 
 (defun plz-media-type:application/json-array--parse-next (media-type)
   "Parse a single line of the newline delimited JSON MEDIA-TYPE."
