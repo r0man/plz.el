@@ -184,7 +184,11 @@ CHUNK is a part of the HTTP body."
 
 (defclass plz-media-type:application/octet-stream (plz-media-type)
   ((type :initform 'application)
-   (subtype :initform 'octet-stream)))
+   (subtype :initform 'octet-stream))
+  "A media type class that handles the processing of octet stream
+HTTP responses.  The media type sets the body slot of the
+plz-response struct to the unmodified value of the HTTP response
+body.  It is used as the default media type processor.")
 
 (cl-defmethod plz-media-type-else ((media-type plz-media-type:application/octet-stream) error)
   "Transform the ERROR into a format suitable for MEDIA-TYPE."
