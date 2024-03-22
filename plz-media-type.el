@@ -340,7 +340,7 @@ will always be set to nil.")
     :initarg :handler
     :initform nil
     :type (or function null symbol)))
-    "A media type class that handles the processing of HTTP responses
+  "A media type class that handles the processing of HTTP responses
 in a JSON format that assumes that the object at the top level is
 an array.  The HTTP response is processed in a streaming way.
 Each object in the top level array will be parsed with the
@@ -380,6 +380,7 @@ will always be set to nil.")
 (cl-defmethod plz-media-type-then ((media-type plz-media-type:application/x-ndjson) response)
   "Transform the RESPONSE into a format suitable for MEDIA-TYPE."
   (plz-media-type:application/x-ndjson--parse-stream media-type)
+  (setf (plz-response-body response) nil)
   response)
 
 ;; Content Type: application/xml
