@@ -441,11 +441,24 @@ It may be:
   non-existent file; if it exists, it will not be overwritten,
   and an error will be signaled.
 
-- `(stream :through PROCESS-FILTER)' to asynchronously stream the
-  HTTP response.  PROCESS-FILTER is an Emacs process filter
-  function, and must accept two arguments: the curl process
-  sending the request and a chunk of the HTTP body, which was
-  just received.
+- `(media-types MEDIA-TYPES)' to handle the processing of the
+  response based on the Content-Type header.  MEDIA-TYPES is an
+  association list from a content type symbol to an instance of a
+  `plz-media-type' class.  The `plz-media-types' variable is
+  bound to an association list and can be used to handle some
+  commonly used formats such as JSON, HTML, XML.  This list can
+  be used as a basis and is meant to be extended by users.  If no
+  media type was found for a content type, it will be handled by
+  the default octet stream media type.  When this option is used,
+  the THEN callback will always receive a plz-response struct,
+  and the ELSE callback a plz-error.  The plz-response struct
+  will always have the status and header slots set.  The body
+  slot depends on the media type implementation.  In the case for
+  JSON, HTML, XML it will contain the decoded response body.
+  When receiving JSON for example, it will be an Emacs Lisp
+  association list.  For streaming responses like
+  text/event-stream it is set to nil, and events are dispatched
+  to the handlers registered for this media type.'
 
 - A function, which is called in the response buffer with it
   narrowed to the response body (suitable for, e.g. `json-read').
