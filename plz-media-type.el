@@ -53,7 +53,11 @@
     :documentation "The parameters of the media type."
     :initarg :parameters
     :initform nil
-    :subtype list)))
+    :subtype list))
+  "A class that hold information about the type, subtype and
+parameters of a media type.  It is meant to be sub-classed to
+handle the processing of different media types and supports the
+processing of streaming and non-streaming HTTP responses.")
 
 (defun plz-media-type-charset (media-type)
   "Return the character set of the MEDIA-TYPE."
