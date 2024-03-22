@@ -450,15 +450,17 @@ It may be:
   be used as a basis and is meant to be extended by users.  If no
   media type was found for a content type, it will be handled by
   the default octet stream media type.  When this option is used,
-  the THEN callback will always receive a plz-response struct,
-  and the ELSE callback a plz-error.  The plz-response struct
-  will always have the status and header slots set.  The body
-  slot depends on the media type implementation.  In the case for
-  JSON, HTML, XML it will contain the decoded response body.
-  When receiving JSON for example, it will be an Emacs Lisp
-  association list.  For streaming responses like
-  text/event-stream it is set to nil, and events are dispatched
-  to the handlers registered for this media type.'
+  the THEN callback will always receive a plz-response struct as
+  argument, and the ELSE callback always a plz-error struct.  The
+  plz-response struct will always have the status and header
+  slots set.  The body slot depends on the media type
+  implementation.  In the case for JSON, HTML, XML it will
+  contain the decoded response body.  When receiving JSON for
+  example, it will be an Emacs Lisp association list.  For
+  streaming responses like text/event-stream it will be set to
+  nil, and the events of the server sent events specification
+  will be dispatched to the handlers registered with the media
+  type instance.
 
 - A function, which is called in the response buffer with it
   narrowed to the response body (suitable for, e.g. `json-read').
