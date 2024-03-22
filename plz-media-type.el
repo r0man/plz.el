@@ -32,6 +32,34 @@
 ;; JSON, XML, HTML, and binary data.  It allows for extensible
 ;; processing of additional types through subclassing.
 
+;;; Examples:
+
+;; Non-streaming requests
+;; ======================
+
+;; Make a syncrounous HTTP request and use the default media type
+;; association list to decode the body of the HTTP response.
+
+;; (plz-media-type-request
+;;   'get "https://httpbin.org/json"
+;;   :as `(media-types ,plz-media-types))
+
+
+;; Streaming requests
+;; ==================
+
+;; Make a syncrounous HTTP request to an endpoint that returns newline
+;; delimited JSON objects. The handler will be called 5 times, each
+;; time with the parse JSON object.
+
+;; (plz-media-type-request
+;;   'get "https://httpbin.org/stream/5"
+;;   :as `(media-types
+;;         ((application/json
+;;           . ,(plz-media-type:application/x-ndjson
+;;               :handler (lambda (object)
+;;                          (message "%s" object)))))))
+
 ;;; Code:
 
 ;;;; Requirements
