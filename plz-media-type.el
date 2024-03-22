@@ -339,7 +339,15 @@ will always be set to nil.")
     :documentation "A function that will be called for each line that contains a JSON object."
     :initarg :handler
     :initform nil
-    :type (or function null symbol))))
+    :type (or function null symbol)))
+    "A media type class that handles the processing of HTTP responses
+in a JSON format that assumes that the object at the top level is
+an array.  The HTTP response is processed in a streaming way.
+Each object in the top level array will be parsed with the
+`json-parse-buffer' function.  The function in the :handler slot
+will be called each time a new object arrives.  The body slot of
+the plz-response struct passed to the THEN and ELSE callbacks
+will always be set to nil.")
 
 (defconst plz-media-type:application/x-ndjson--line-regexp
   (rx (* not-newline) (or "\r\n" "\n" "\r"))
