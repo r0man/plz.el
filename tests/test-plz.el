@@ -583,16 +583,14 @@ and only called once."
       (should (string-match "Server: gunicorn" output))
       (should (string-match "\"args\":\s*{}" output)))))
 
-(plz-deftest plz-get-json-slow-process-filter nil
+(ert-deftest plz-get-json-slow-process-filter nil
+  (message "-------------------------------------------------")
   (let* ((test-json) (outputs)
-         (process (plz 'get (url "/get")
+         (process (plz 'get "https://httpbin.org/get"
                     :as #'json-read
                     :then (lambda (json)
                             (setf test-json json))
                     :process-filter (lambda (process output)
-                                      (message "GOING TO SLEEP")
-                                      (sleep-for 1)
-                                      (message "SLEEP DONE")
                                       (push output outputs)
                                       (when (buffer-live-p (process-buffer process))
                                         (with-current-buffer (process-buffer process)
@@ -601,7 +599,11 @@ and only called once."
                                               (goto-char (process-mark process))
                                               (insert output)
                                               (set-marker (process-mark process) (point)))
-                                            (if moving (goto-char (process-mark process))))))))))
+                                            (if moving (goto-char (process-mark process))))))
+                                      (message "OUTPUT: %s" output)
+                                      (message "GOING TO SLEEP")
+                                      (sleep-for 1)
+                                      (message "SLEEP DONE")))))
     (plz-test-wait process)
     (let-alist test-json
       (should (string-match "curl" .headers.User-Agent)))
@@ -615,3 +617,23 @@ and only called once."
 (provide 'test-plz)
 
 ;;; test-plz.el ends here
+
+
+;; (message "-------------------------------------------------")
+;; (plz 'get "https://httpbin.org/get"
+;;   :as #'json-read
+;;   :then (lambda (json)
+;;           1)
+;;   :process-filter (lambda (process output)
+;;                     (when (buffer-live-p (process-buffer process))
+;;                       (with-current-buffer (process-buffer process)
+;;                         (let ((moving (= (point) (process-mark process))))
+;;                           (save-excursion
+;;                             (goto-char (process-mark process))
+;;                             (insert output)
+;;                             (set-marker (process-mark process) (point)))
+;;                           (if moving (goto-char (process-mark process))))))
+;;                     (message "OUTPUT: %s" output)
+;;                     (message "GOING TO SLEEP")
+;;                     (sleep-for 1)
+;;                     (message "SLEEP DONE")))

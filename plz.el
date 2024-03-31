@@ -417,10 +417,10 @@ to the HTTP body into the process buffer.
                                           (lambda (process output)
                                             (unwind-protect
                                                 (progn
-                                                  (process-put process :plz-filter-active 1)
+                                                  (process-put process :plz-filter-active (+ (or (process-get process :plz-filter-active) 0) 1))
                                                   (message "ENTER: %s" (process-get process :plz-filter-active))
                                                   (funcall process-filter process output))
-                                              (process-put process :plz-filter-active nil)
+                                              (process-put process :plz-filter-active (- (process-get process :plz-filter-active) 1))
                                               (message "LEAVE: %s" (process-get process :plz-filter-active)))))
                                 :sentinel #'plz--sentinel
                                 :stderr stderr-process
@@ -764,6 +764,30 @@ for asynchronous ones)."
            (plz--respond process buffer status)
          (run-at-time 0 nil #'plz--respond process buffer status))))))
 
+(defun plz--sentinel (process status)
+  "Sentinel for curl PROCESS.
+STATUS should be the process's event string (see info
+node `(elisp) Sentinels').  Calls `plz--respond' to process the
+HTTP response (directly for synchronous requests, or from a timer
+for asynchronous ones)."
+  (pcase status
+    ((or "finished\n" "killed\n" "interrupt\n"
+         (pred numberp)
+         (rx "exited abnormally with code " (group (1+ digit))))
+     (let ((buffer (process-buffer process)))
+       (message "SENTINEL CALLED: %s" (process-get process :plz-filter-active))
+       (if (process-get process :plz-sync)
+           (plz--respond process buffer status)
+         (run-at-time 0 nil #'plz--respond-eventually process buffer status))))))
+
+(defun plz--respond-eventually (process buffer status)
+  (message "RESPOND EVENTUALLY: %s" (process-get process :plz-filter-active))
+  (cond ((null (process-get process :plz-filter-active))
+         (plz--respond process buffer status))
+        ((zerop (process-get process :plz-filter-active))
+         (plz--respond process buffer status))
+        (t (run-at-time 0 nil #'plz--respond-eventually process buffer status))))
+
 (defun plz--respond (process buffer status)
   "Respond to HTTP response from PROCESS in BUFFER.
 Parses the response and calls the THEN/ELSE callbacks
@@ -780,6 +804,8 @@ argument passed to `plz--sentinel', which see."
         (pcase-exhaustive status
           ((or 0 "finished\n")
            ;; Curl exited normally: check HTTP status code.
+           (message "YO: %s" (buffer-string))
+           ;; (widen)
            (goto-char (point-min))
            (plz--skip-proxy-headers)
            (while (plz--skip-redirect-headers))
