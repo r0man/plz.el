@@ -60,9 +60,12 @@ If running httpbin locally, set to \"http://localhost\".")
 
 ;;;; Macros
 
-(cl-defun plz-test-wait (process &optional (seconds 0.1) (times 100))
-  "Wait for SECONDS seconds TIMES times for PROCESS to finish."
-  (when process
+(cl-defun plz-test-wait (process-or-fn &optional (seconds 0.1) (times 100))
+  "Wait for SECONDS seconds TIMES times for PROCESS-OR-FN.
+
+If PROCESS-OR-FN is a process, wait for it to finish.  If it's a
+function wait until it returns non-nil."
+  (when process-or-fn
     ;; Sometimes it seems that the process is killed, the THEN
     ;; function called by its sentinel, and its buffer killed, all
     ;; before this function gets called with the process argument;
@@ -70,7 +73,10 @@ If running httpbin locally, set to \"http://localhost\".")
     ;; whether PROCESS is non-nil seems to fix it, but it's possible
     ;; that something funny is going on...
     (cl-loop for i upto times ;; 10 seconds
-             while (equal 'run (process-status process))
+             while (cond ((processp process-or-fn)
+                          (equal 'run (process-status process-or-fn)))
+                         ((functionp process-or-fn)
+                          (not (funcall process-or-fn))))
              do (sleep-for seconds))))
 
 (cl-defmacro plz-deftest (name () &body docstring-keys-and-body)
@@ -559,56 +565,79 @@ and only called once."
 
 ;; TODO: Add test for canceling queue.
 
-(plz-deftest plz-get-json-process-filter nil
+;; Process filter
+
+(defun test-plz-process-filter (process output)
+  "Write OUTPUT to the PROCESS buffer."
+  (when (buffer-live-p (process-buffer process))
+    (with-current-buffer (process-buffer process)
+      (let ((moving (= (point) (process-mark process))))
+        (save-excursion
+          (goto-char (process-mark process))
+          (insert output)
+          (set-marker (process-mark process) (point)))
+        (if moving (goto-char (process-mark process)))))))
+
+(plz-deftest plz-get-json-process-filter-async ()
   (let* ((test-json) (outputs)
          (process (plz 'get (url "/get")
                     :as #'json-read
                     :then (lambda (json)
                             (setf test-json json))
                     :process-filter (lambda (process output)
-                                      (push output outputs)
-                                      (when (buffer-live-p (process-buffer process))
-                                        (with-current-buffer (process-buffer process)
-                                          (let ((moving (= (point) (process-mark process))))
-                                            (save-excursion
-                                              (goto-char (process-mark process))
-                                              (insert output)
-                                              (set-marker (process-mark process) (point)))
-                                            (if moving (goto-char (process-mark process))))))))))
+                                      (test-plz-process-filter process output)
+                                      (push output outputs)))))
     (plz-test-wait process)
     (let-alist test-json
       (should (string-match "curl" .headers.User-Agent)))
     (let ((output (string-join (reverse outputs))))
-      (should (string-match "200 OK" output))
+      (should (string-match "HTTP.*\s+200" output))
       (should (string-match "Server: gunicorn" output))
       (should (string-match "\"args\":\s*{}" output)))))
 
-(ert-deftest plz-get-json-slow-process-filter nil
-  (message "-------------------------------------------------")
+(plz-deftest plz-get-json-process-filter-sync ()
+  (let* ((outputs)
+         (response (plz 'get (url "/get")
+                    :as 'response
+                    :process-filter (lambda (process output)
+                                      (test-plz-process-filter process output)
+                                      (push output outputs)))))
+    (plz-test-get-response response)
+    (let ((output (string-join (reverse outputs))))
+      (should (string-match "HTTP.*\s+200" output))
+      (should (string-match "Server: gunicorn" output))
+      (should (string-match "\"args\":\s*{}" output)))))
+
+(plz-deftest plz-get-json-slow-process-filter-async ()
   (let* ((test-json) (outputs)
-         (process (plz 'get "https://httpbin.org/get"
+         (process (plz 'get (url "/get")
                     :as #'json-read
                     :then (lambda (json)
                             (setf test-json json))
                     :process-filter (lambda (process output)
+                                      (test-plz-process-filter process output)
                                       (push output outputs)
-                                      (when (buffer-live-p (process-buffer process))
-                                        (with-current-buffer (process-buffer process)
-                                          (let ((moving (= (point) (process-mark process))))
-                                            (save-excursion
-                                              (goto-char (process-mark process))
-                                              (insert output)
-                                              (set-marker (process-mark process) (point)))
-                                            (if moving (goto-char (process-mark process))))))
-                                      (message "OUTPUT: %s" output)
-                                      (message "GOING TO SLEEP")
-                                      (sleep-for 1)
-                                      (message "SLEEP DONE")))))
+                                      (sleep-for 1)))))
     (plz-test-wait process)
+    (plz-test-wait (lambda () test-json))
     (let-alist test-json
       (should (string-match "curl" .headers.User-Agent)))
     (let ((output (string-join (reverse outputs))))
-      (should (string-match "200 OK" output))
+      (should (string-match "HTTP.*\s+200" output))
+      (should (string-match "Server: gunicorn" output))
+      (should (string-match "\"args\":\s*{}" output)))))
+
+(plz-deftest plz-get-json-slow-process-filter-sync ()
+  (let* ((outputs)
+         (response (plz 'get (url "/get")
+                    :as 'response
+                    :process-filter (lambda (process output)
+                                      (test-plz-process-filter process output)
+                                      (push output outputs)
+                                      (sleep-for 1)))))
+    (plz-test-get-response response)
+    (let ((output (string-join (reverse outputs))))
+      (should (string-match "HTTP.*\s+200" output))
       (should (string-match "Server: gunicorn" output))
       (should (string-match "\"args\":\s*{}" output)))))
 
@@ -617,23 +646,3 @@ and only called once."
 (provide 'test-plz)
 
 ;;; test-plz.el ends here
-
-
-;; (message "-------------------------------------------------")
-;; (plz 'get "https://httpbin.org/get"
-;;   :as #'json-read
-;;   :then (lambda (json)
-;;           1)
-;;   :process-filter (lambda (process output)
-;;                     (when (buffer-live-p (process-buffer process))
-;;                       (with-current-buffer (process-buffer process)
-;;                         (let ((moving (= (point) (process-mark process))))
-;;                           (save-excursion
-;;                             (goto-char (process-mark process))
-;;                             (insert output)
-;;                             (set-marker (process-mark process) (point)))
-;;                           (if moving (goto-char (process-mark process))))))
-;;                     (message "OUTPUT: %s" output)
-;;                     (message "GOING TO SLEEP")
-;;                     (sleep-for 1)
-;;                     (message "SLEEP DONE")))
