@@ -583,6 +583,31 @@ and only called once."
       (should (string-match "Server: gunicorn" output))
       (should (string-match "\"args\":\s*{}" output)))))
 
+(plz-deftest plz-get-json-slow-process-filter nil
+  (let* ((test-json) (outputs)
+         (process (plz 'get (url "/get")
+                    :as #'json-read
+                    :then (lambda (json)
+                            (setf test-json json))
+                    :process-filter (lambda (process output)
+                                      (sit-for 1)
+                                      (push output outputs)
+                                      (when (buffer-live-p (process-buffer process))
+                                        (with-current-buffer (process-buffer process)
+                                          (let ((moving (= (point) (process-mark process))))
+                                            (save-excursion
+                                              (goto-char (process-mark process))
+                                              (insert output)
+                                              (set-marker (process-mark process) (point)))
+                                            (if moving (goto-char (process-mark process))))))))))
+    (plz-test-wait process)
+    (let-alist test-json
+      (should (string-match "curl" .headers.User-Agent)))
+    (let ((output (string-join (reverse outputs))))
+      (should (string-match "200 OK" output))
+      (should (string-match "Server: gunicorn" output))
+      (should (string-match "\"args\":\s*{}" output)))))
+
 ;;;; Footer
 
 (provide 'test-plz)
