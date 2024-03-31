@@ -413,7 +413,15 @@ to the HTTP body into the process buffer.
                                 :coding 'binary
                                 :command (append (list plz-curl-program) curl-command-line-args)
                                 :connection-type 'pipe
-                                :filter process-filter
+                                :filter (when process-filter
+                                          (lambda (process output)
+                                            (unwind-protect
+                                                (progn
+                                                  (process-put process :plz-filter-active 1)
+                                                  (message "ENTER: %s" (process-get process :plz-filter-active))
+                                                  (funcall process-filter process output))
+                                              (process-put process :plz-filter-active nil)
+                                              (message "LEAVE: %s" (process-get process :plz-filter-active)))))
                                 :sentinel #'plz--sentinel
                                 :stderr stderr-process
                                 :noquery noquery))
@@ -744,6 +752,14 @@ for asynchronous ones)."
          (pred numberp)
          (rx "exited abnormally with code " (group (1+ digit))))
      (let ((buffer (process-buffer process)))
+       (message "SENTINEL CALLED: %s %s" status (process-exit-status process))
+       (while (process-get process :plz-filter-active)
+         (message "ACTIVE: %s" (process-get process :plz-filter-active))
+         (message "PROCESS STATUS: %s" (process-status process))
+         (message "PROCESS EXIT STATUS: %s" (process-exit-status process))
+         (accept-process-output)
+         (sleep-for 1))
+       (message "CALL RESPOND: %s" (process-get process :plz-filter-active))
        (if (process-get process :plz-sync)
            (plz--respond process buffer status)
          (run-at-time 0 nil #'plz--respond process buffer status))))))
